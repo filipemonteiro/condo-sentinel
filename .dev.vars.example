@@ -1,0 +1,124 @@
+########################################
+# 🔐 TUYA API
+########################################
+
+# Client ID da API Tuya
+CLIENT_ID=your_tuya_client_id
+
+# Client Secret da API Tuya
+CLIENT_SECRET=your_tuya_client_secret
+
+# Base URL da API Tuya (ex: us, eu, cn)
+TUYA_BASE=https://openapi.tuyaus.com
+
+
+########################################
+# 📲 TELEGRAM ALERTS
+########################################
+
+# Token do bot do Telegram
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+
+# Chat ID que receberá os alertas
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+
+
+########################################
+# 🔐 DASHBOARD / API SECURITY
+########################################
+
+# Token obrigatório para acessar /api/status e /api/history
+# Gere com: openssl rand -hex 32
+DASHBOARD_ACCESS_TOKEN=your_secure_random_token
+
+
+########################################
+# 🖥️ APP / DASHBOARD CONFIG
+########################################
+
+# Nome exibido no dashboard
+APP_NAME=IoT Sentinel
+
+# Título do dashboard
+DASHBOARD_TITLE=Dashboard de monitorias IoT
+
+
+########################################
+# ⚙️ EXECUTION / BEHAVIOR
+########################################
+
+# Se true, não envia notificações (modo teste)
+DRY_RUN=true
+
+# Loga payload completo da Tuya (NÃO usar em produção)
+LOG_FULL_PAYLOAD=false
+
+
+########################################
+# ⏱️ ALERT COOLDOWNS (em minutos)
+########################################
+
+# Cooldown padrão para alertas de nível baixo
+COOLDOWN_MINUTES=60
+
+# Cooldown para device offline
+OFFLINE_COOLDOWN_MINUTES=180
+
+# Cooldown para falhas de sensor
+SENSOR_COOLDOWN_MINUTES=60
+
+
+########################################
+# 📊 HISTORY STORAGE
+########################################
+
+# Quantidade máxima de pontos de histórico por device
+# Ex: 288 = 24h com coleta a cada 5 min
+HISTORY_MAX_POINTS=288
+
+
+########################################
+# 📡 DEVICE CONFIGURATION
+########################################
+
+# JSON com lista de devices monitorados
+# NÃO colocar dados reais aqui
+DEVICE_REGISTRY_JSON=[
+  {
+    "id": "device_1",
+    "name": "Water Tank A",
+    "type": "water_level_sensor",
+    "role": "tank_a",
+    "enabled": true,
+    "thresholdPercent": 20,
+    "recoveryMarginPercent": 10,
+    "minConsecutiveBreaches": 2
+  }
+]
+
+
+########################################
+# 🤖 AUTOMATIONS
+########################################
+
+# JSON com regras de automação
+# NÃO colocar dados reais aqui
+AUTOMATIONS_JSON=[
+  {
+    "id": "auto_1",
+    "type": "water_reserve_control",
+    "enabled": true,
+    "sourceRoles": ["tank_a", "tank_b"],
+    "targetValveRole": "valve_main",
+    "trigger": {
+      "allBelowPercent": 20,
+      "minConsecutiveChecks": 3
+    },
+    "action": {
+      "openForMinutes": 15
+    },
+    "notify": {
+      "cooldownMinutes": 120
+    }
+  }
+]

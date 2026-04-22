@@ -137,3 +137,13 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+.dev.vars
+.DS_Store
+dist/
+
+# Cloudflare / Worker
+wrangler.toml.bak
+.wrangler
+.dev.vars
+!.dev.vars.example

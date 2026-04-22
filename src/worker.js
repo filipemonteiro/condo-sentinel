@@ -114,7 +114,7 @@ async function handleCheck(env) {
         context.readingsByRole[device.role || device.id] = result.reading;
       }
 
-      await appendDeviceHistory(env, device, result.reading, result.online);
+      await appendDeviceHistory(env, device, result.reading, result.online, now);
     } catch (err) {
       console.error(`Erro processando device ${device.name || device.id}:`, stringifyError(err));
 
@@ -309,6 +309,15 @@ async function inspectWaterLevelSensor(env, accessToken, device, dState, cfg, no
       dState.lastSensorFaultAlertAt = now;
     }
 
+    dState.lastReading = {
+      percent: Number.isFinite(reading.percent) ? reading.percent : null,
+      liquidState: reading.state,
+      battery: reading.battery,
+      valid: false,
+      invalidReason,
+      readingUpdatedAt: now,
+    };
+
     return {
       ...reading,
       valid: false,
@@ -329,6 +338,8 @@ async function inspectWaterLevelSensor(env, accessToken, device, dState, cfg, no
     percent: reading.percent,
     liquidState: reading.state,
     battery: reading.battery,
+    valid: true,
+    readingUpdatedAt: now,
   };
 
   const threshold = toInt(device.thresholdPercent, 20);
@@ -440,6 +451,7 @@ async function inspectGenericStatusDevice(
   dState.lastReading = {
     alarmValue,
     battery: batteryValue,
+    readingUpdatedAt: now,
   };
 
   return reading;
@@ -462,6 +474,8 @@ async function inspectValve(env, accessToken, device, dState, cfg, now, notifica
 
   dState.lastReading = {
     currentValue,
+    statusCode,
+    readingUpdatedAt: now,
   };
 
   return reading;
@@ -662,8 +676,11 @@ async function getTuyaDeviceStatus(env, accessToken, deviceId, logFullPayload = 
   return data;
 }
 
-async function appendDeviceHistory(env, device, reading, online) {
-  if (!device?.id) return;
+async function appendDeviceHistory(env, device, reading, online, now = Date.now()) {
+  if (!device?.id) return false;
+
+  const point = buildHistoryPoint(device, reading, online, now);
+  if (!point) return false;
 
   const key = `history:device:${device.id}`;
   const raw = await env.STATE.get(key);
@@ -678,8 +695,20 @@ async function appendDeviceHistory(env, device, reading, online) {
     }
   }
 
-  const point = buildHistoryPoint(device, reading, online);
-  if (!point) return;
+  const last = history[history.length - 1];
+  const minIntervalMinutes = toInt(env.HISTORY_MIN_INTERVAL_MINUTES, 15);
+  const minIntervalMs = minIntervalMinutes * 60 * 1000;
+  const minDeltaPercent = toInt(env.HISTORY_MIN_DELTA_PERCENT, 2);
+
+  const shouldWrite = shouldAppendHistoryPoint({
+    device,
+    last,
+    next: point,
+    minIntervalMs,
+    minDeltaPercent,
+  });
+
+  if (!shouldWrite) return false;
 
   history.push(point);
 
@@ -689,19 +718,74 @@ async function appendDeviceHistory(env, device, reading, online) {
   }
 
   await env.STATE.put(key, JSON.stringify(history));
+  return true;
 }
 
-function buildHistoryPoint(device, reading, online) {
-  const ts = Date.now();
+function shouldAppendHistoryPoint({ device, last, next, minIntervalMs, minDeltaPercent }) {
+  if (!next) return false;
+  if (!last) return true;
 
+  const elapsedMs =
+    Number.isFinite(next.ts) && Number.isFinite(last.ts)
+      ? next.ts - last.ts
+      : Number.POSITIVE_INFINITY;
+
+  const intervalReached = elapsedMs >= minIntervalMs;
+  const onlineChanged = last.online !== next.online;
+
+  if (onlineChanged) return true;
+
+  switch (device.type) {
+    case "water_level_sensor": {
+      const validChanged = last.valid !== next.valid;
+      const stateChanged = last.state !== next.state;
+
+      const lastPercent = Number.isFinite(last.percent) ? last.percent : null;
+      const nextPercent = Number.isFinite(next.percent) ? next.percent : null;
+
+      const percentChanged =
+        lastPercent !== null &&
+        nextPercent !== null &&
+        Math.abs(nextPercent - lastPercent) >= minDeltaPercent;
+
+      const percentNullnessChanged =
+        (lastPercent === null) !== (nextPercent === null);
+
+      return (
+        validChanged ||
+        stateChanged ||
+        percentChanged ||
+        percentNullnessChanged ||
+        intervalReached
+      );
+    }
+
+    case "gas_sensor":
+    case "water_leak_sensor": {
+      const alarmChanged = last.alarm !== next.alarm;
+      const alarmValueChanged = last.alarmValue !== next.alarmValue;
+      return alarmChanged || alarmValueChanged || intervalReached;
+    }
+
+    case "valve": {
+      const valueChanged = last.currentValue !== next.currentValue;
+      return valueChanged || intervalReached;
+    }
+
+    default:
+      return intervalReached;
+  }
+}
+
+function buildHistoryPoint(device, reading, online, ts = Date.now()) {
   if (device.type === "water_level_sensor") {
     return {
       ts,
       type: device.type,
       online: !!online,
-      percent: reading?.percent ?? null,
+      percent: Number.isFinite(reading?.percent) ? reading.percent : null,
       state: reading?.state ?? null,
-      battery: reading?.battery ?? null,
+      battery: Number.isFinite(reading?.battery) ? reading.battery : null,
       valid: reading?.valid ?? null,
     };
   }
@@ -713,7 +797,7 @@ function buildHistoryPoint(device, reading, online) {
       online: !!online,
       alarm: isAlarmLikeValue(reading?.alarmValue),
       alarmValue: reading?.alarmValue ?? null,
-      battery: reading?.battery ?? null,
+      battery: Number.isFinite(reading?.battery) ? reading.battery : null,
     };
   }
 
@@ -734,9 +818,15 @@ async function buildDashboardStatus(env) {
   const state = await loadState(env);
   const devices = parseJsonEnv(env.DEVICE_REGISTRY_JSON, []);
   const automations = parseJsonEnv(env.AUTOMATIONS_JSON, []);
+  const now = Date.now();
+  const staleAfterMinutes = toInt(env.DASHBOARD_STALE_AFTER_MINUTES, 30);
+  const staleAfterMs = staleAfterMinutes * 60 * 1000;
 
   const deviceViews = (Array.isArray(devices) ? devices : []).map(device => {
     const dState = state.devices?.[device.id] || {};
+    const readingUpdatedAt = dState.lastReading?.readingUpdatedAt || null;
+    const isStale =
+      !!readingUpdatedAt && now - readingUpdatedAt > staleAfterMs;
 
     return {
       id: device.id,
@@ -745,6 +835,8 @@ async function buildDashboardStatus(env) {
       type: device.type,
       enabled: device.enabled !== false,
       online: dState.lastBatchIsOnline === true,
+      stale: isStale,
+      readingUpdatedAt,
       offlineAlertActive: !!dState.offlineAlertActive,
       sensorFaultActive: !!dState.sensorFaultActive,
       lowLevelAlertActive: !!dState.lowLevelAlertActive,
@@ -760,6 +852,7 @@ async function buildDashboardStatus(env) {
     totalDevices: deviceViews.length,
     onlineDevices: deviceViews.filter(d => d.online).length,
     offlineDevices: deviceViews.filter(d => !d.online).length,
+    staleDevices: deviceViews.filter(d => d.stale).length,
     devicesInAlarm: deviceViews.filter(d => d.alarmActive).length,
     devicesWithFault: deviceViews.filter(d => d.sensorFaultActive).length,
     devicesLowLevel: deviceViews.filter(d => d.lowLevelAlertActive).length,
@@ -770,7 +863,8 @@ async function buildDashboardStatus(env) {
     summary,
     devices: deviceViews,
     automations: state.automations || {},
-    generatedAt: Date.now(),
+    generatedAt: now,
+    staleAfterMinutes,
   };
 }
 
@@ -847,12 +941,16 @@ function renderDashboardHtml() {
     }
     .device-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
       gap: 16px;
     }
     .muted {
       color: #6b7280;
       font-size: 14px;
+    }
+    .small {
+      font-size: 12px;
+      color: #6b7280;
     }
     .badge {
       display: inline-block;
@@ -867,6 +965,7 @@ function renderDashboardHtml() {
     .warn { background: #fef3c7; color: #92400e; }
     .bad { background: #fee2e2; color: #991b1b; }
     .neutral { background: #e5e7eb; color: #374151; }
+    .info { background: #dbeafe; color: #1d4ed8; }
     canvas {
       margin-top: 12px;
       max-height: 180px;
@@ -890,6 +989,11 @@ function renderDashboardHtml() {
     function formatTs(ts) {
       if (!ts) return "-";
       return new Date(ts).toLocaleString("pt-BR");
+    }
+
+    function minutesAgo(ts) {
+      if (!ts) return null;
+      return Math.max(0, Math.floor((Date.now() - ts) / 60000));
     }
 
     function badge(label, cls) {
@@ -916,6 +1020,7 @@ function renderDashboardHtml() {
         card('Total de devices', summary.totalDevices),
         card('Online', summary.onlineDevices),
         card('Offline', summary.offlineDevices),
+        card('Desatualizados', summary.staleDevices),
         card('Em alarme', summary.devicesInAlarm),
         card('Com falha', summary.devicesWithFault),
         card('Nível baixo', summary.devicesLowLevel),
@@ -927,14 +1032,23 @@ function renderDashboardHtml() {
 
       items.push(device.online ? badge('Online', 'ok') : badge('Offline', 'bad'));
 
+      if (device.stale) items.push(badge('Sem atualização recente', 'info'));
       if (device.lowLevelAlertActive) items.push(badge('Nível baixo', 'warn'));
       if (device.sensorFaultActive) items.push(badge('Leitura inválida', 'bad'));
       if (device.alarmActive) items.push(badge('Alarme', 'bad'));
-      if (!device.lowLevelAlertActive && !device.sensorFaultActive && !device.alarmActive) {
+
+      if (!device.stale && !device.lowLevelAlertActive && !device.sensorFaultActive && !device.alarmActive) {
         items.push(badge('Sem alerta ativo', 'neutral'));
       }
 
       return items.join('');
+    }
+
+    function getReadingFreshnessText(device) {
+      const mins = minutesAgo(device.readingUpdatedAt);
+      if (mins === null) return 'Sem leitura registrada';
+      if (mins === 0) return 'Leitura atualizada há menos de 1 min';
+      return 'Última leitura válida há ' + mins + ' min';
     }
 
     function renderDeviceCard(device) {
@@ -946,17 +1060,20 @@ function renderDashboardHtml() {
           <div><strong>Estado:</strong> \${device.lastReading?.liquidState ?? '-'}</div>
           <div><strong>Bateria:</strong> \${device.lastReading?.battery ?? '-' }%</div>
           <div><strong>Breach count:</strong> \${device.breachCount ?? 0}</div>
+          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
           <canvas id="chart-\${device.id}"></canvas>
         \`;
       } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
         extra = \`
           <div><strong>Alarme:</strong> \${device.lastReading?.alarmValue ?? '-'}</div>
           <div><strong>Bateria:</strong> \${device.lastReading?.battery ?? '-' }%</div>
+          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
           <canvas id="chart-\${device.id}"></canvas>
         \`;
       } else if (device.type === 'valve') {
         extra = \`
           <div><strong>Status:</strong> \${device.lastReading?.currentValue ?? '-'}</div>
+          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
         \`;
       } else {
         extra = '<div class="muted">Tipo ainda sem visual específico.</div>';
@@ -967,7 +1084,8 @@ function renderDashboardHtml() {
           <h3 style="margin-top:0;">\${device.name}</h3>
           <div class="muted">\${device.role || '-'} • \${device.type}</div>
           <div style="margin:10px 0;">\${deviceStatusBadges(device)}</div>
-          <div><strong>Última atualização:</strong> \${formatTs(device.lastSeenAt)}</div>
+          <div><strong>Última checagem do worker:</strong> \${formatTs(device.lastSeenAt)}</div>
+          <div><strong>Leitura registrada:</strong> \${formatTs(device.readingUpdatedAt)}</div>
           \${extra}
         </div>
       \`;
@@ -985,17 +1103,74 @@ function renderDashboardHtml() {
       }
     }
 
+    function buildWaterDataset(points) {
+      const labels = points.map(p => new Date(p.ts).toLocaleTimeString('pt-BR'));
+      const values = points.map(p => (typeof p.percent === 'number' ? p.percent : null));
+
+      return {
+        labels,
+        datasets: [
+          {
+            label: 'Nível %',
+            data: values,
+            spanGaps: true,
+            tension: 0.2
+          }
+        ]
+      };
+    }
+
+    function buildBinaryDataset(points, label) {
+      const labels = points.map(p => new Date(p.ts).toLocaleTimeString('pt-BR'));
+      const values = points.map(p => p.alarm ? 1 : 0);
+
+      return {
+        labels,
+        datasets: [
+          {
+            label,
+            data: values,
+            spanGaps: true,
+            stepped: true
+          }
+        ]
+      };
+    }
+
+    function buildPointStyles(points) {
+      return points.map(p => p.online === false ? 6 : 3);
+    }
+
+    function buildPointRadius(points) {
+      return points.map(p => p.online === false ? 5 : 2);
+    }
+
     function renderChart(device, points) {
       const el = document.getElementById('chart-' + device.id);
       if (!el) return;
 
-      const labels = points.map(p => new Date(p.ts).toLocaleTimeString('pt-BR'));
-      let data = [];
+      let chartData;
+      let yConfig = {};
 
       if (device.type === 'water_level_sensor') {
-        data = points.map(p => p.percent);
+        chartData = buildWaterDataset(points);
+        chartData.datasets[0].pointStyle = buildPointStyles(points);
+        chartData.datasets[0].pointRadius = buildPointRadius(points);
+        yConfig = {
+          min: 0,
+          max: 100
+        };
       } else {
-        data = points.map(p => p.alarm ? 1 : 0);
+        chartData = buildBinaryDataset(points, 'Alarme');
+        chartData.datasets[0].pointStyle = buildPointStyles(points);
+        chartData.datasets[0].pointRadius = buildPointRadius(points);
+        yConfig = {
+          min: 0,
+          max: 1,
+          ticks: {
+            stepSize: 1
+          }
+        };
       }
 
       if (charts[device.id]) {
@@ -1004,17 +1179,28 @@ function renderDashboardHtml() {
 
       charts[device.id] = new Chart(el, {
         type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: device.type === 'water_level_sensor' ? 'Nível %' : 'Alarme',
-            data
-          }]
-        },
+        data: chartData,
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: false
+          animation: false,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                afterLabel: (ctx) => {
+                  const point = points[ctx.dataIndex];
+                  if (!point) return '';
+                  const meta = [];
+                  if (point.online === false) meta.push('Device offline neste ponto');
+                  if (point.valid === false) meta.push('Leitura inválida');
+                  return meta.join(' • ');
+                }
+              }
+            }
+          },
+          scales: {
+            y: yConfig
+          }
         }
       });
     }
@@ -1212,7 +1398,16 @@ function defaultState() {
 }
 
 async function saveState(env, state) {
-  await env.STATE.put("condo_automation_state", JSON.stringify(state));
+  const key = "condo_automation_state";
+  const next = JSON.stringify(state);
+  const current = await env.STATE.get(key);
+
+  if (current === next) {
+    return false;
+  }
+
+  await env.STATE.put(key, next);
+  return true;
 }
 
 function mergeDeviceStateDefaults(existing, type) {

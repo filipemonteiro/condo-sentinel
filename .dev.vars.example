@@ -41,6 +41,7 @@ APP_NAME=IoT Sentinel
 
 # Título do dashboard
 DASHBOARD_TITLE=Dashboard de monitorias IoT
+DASHBOARD_STALE_AFTER_MINUTES=30
 
 
 ########################################
@@ -75,7 +76,8 @@ SENSOR_COOLDOWN_MINUTES=60
 # Quantidade máxima de pontos de histórico por device
 # Ex: 288 = 24h com coleta a cada 5 min
 HISTORY_MAX_POINTS=288
-
+HISTORY_MIN_INTERVAL_MINUTES=15
+HISTORY_MIN_DELTA_PERCENT=2
 
 ########################################
 # 📡 DEVICE CONFIGURATION

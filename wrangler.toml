@@ -5,3 +5,7 @@ compatibility_date = "2026-04-21"
 [vars]
 APP_NAME = "IoT Sentinel"
 DASHBOARD_TITLE = "Dashboard de monitorias IoT"
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "local"

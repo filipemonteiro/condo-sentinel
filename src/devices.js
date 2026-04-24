@@ -3,7 +3,7 @@
  * Lógica de inspeção e gerenciamento de dispositivos
  */
 
-import { getTuyaDeviceStatus, buildBatchDeviceMap } from './tuya.js';
+import { getTuyaDeviceStatus, buildBatchDeviceMap, getAllDevicesBatchInfo } from './tuya.js';
 import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo } from './utils.js';
 
 /**

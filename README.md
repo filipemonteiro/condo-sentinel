@@ -1,5 +1,7 @@
 # Condo Sentinel
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
 Lightweight IoT monitoring system for condos and small infrastructures.
 
 ## 🚀 Features
@@ -172,4 +174,8 @@ Initial version — evolving into a reusable IoT monitoring platform.
 
 ## 📄 License
 
--
+This project is licensed under the MIT License.
+
+Copyright (c) 2026 Filipe Monteiro
+
+See the LICENSE file for details.

@@ -1,0 +1,37 @@
+{
+  "name": "condo-sentinel",
+  "version": "0.1.0",
+  "description": "Lightweight serverless IoT monitoring and alerting system for condos and small facilities.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "author": "Filipe Monteiro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/filipemonteiro/condo-sentinel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/filipemonteiro/condo-sentinel/issues"
+  },
+  "homepage": "https://github.com/filipemonteiro/condo-sentinel#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check src/worker.js && node --check src/tuya.js && node --check src/notifications.js && node --check src/dashboard.js && node --check src/utils.js && node --check src/automations.js && node --check src/devices.js && node --check src/state.js && node --check src/history.js",
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "iot",
+    "tuya",
+    "telegram",
+    "monitoring",
+    "condominium"
+  ]
+}

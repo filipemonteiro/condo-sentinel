@@ -4,7 +4,7 @@
 
 Lightweight IoT monitoring system for condos and small infrastructures.
 
-## 🚀 Features
+## Features
 
 - Monitoring of IoT devices (water level, gas, leak sensors, valves)
 - Smart alerting with cooldowns and noise reduction
@@ -12,31 +12,48 @@ Lightweight IoT monitoring system for condos and small infrastructures.
 - Simple web dashboard
 - Rule-based automation engine
 
-## 🏗️ Architecture
+## Architecture
 
 - Cloudflare Workers
 - Tuya API integration
 - KV storage for state and history
 
-## 🔐 Security
+## Security
 
 - No secrets in code
-- Dashboard protected via access token
 - Sensitive data stored in environment variables
+- Local Cloudflare and Tuya credentials are intentionally ignored by Git
+- Dashboard/API access control is planned, but not enabled in the current version
 
-## 📦 Project Structure
+For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
+
+## Project Structure
 
 ```
 .
+├── .github/workflows/deploy.yml
+├── docs/
 ├── src/
+│   ├── automations.js
+│   ├── dashboard.js
+│   ├── devices.js
+│   ├── history.js
+│   ├── notifications.js
+│   ├── state.js
+│   ├── tuya.js
+│   ├── utils.js
 │   └── worker.js
+├── test/
 ├── .dev.vars.example
 ├── .gitignore
-├── wrangler.toml
-└── README.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── package.json
+├── README.md
+└── wrangler.example.toml
 ```
 
-## ⚙️ Setup
+## Setup
 
 ### 1. Install dependencies
 
@@ -46,13 +63,20 @@ npm install
 
 ### 2. Configure environment
 
-Copy example file:
+Copy the example files:
 
 ```bash
+cp wrangler.example.toml wrangler.toml
 cp .dev.vars.example .dev.vars
 ```
 
-Fill the `.dev.vars` file with your real values.
+Fill `.dev.vars` and `wrangler.toml` with your local values.
+
+Create a Cloudflare KV namespace and replace `__KV_NAMESPACE_ID__` in `wrangler.toml`:
+
+```bash
+npx wrangler kv namespace create STATE
+```
 
 ### 3. Login to Cloudflare
 
@@ -63,16 +87,23 @@ npx wrangler login
 ### 4. Run locally
 
 ```bash
-npx wrangler dev
+npm run dev
 ```
 
-### 5. Deploy
+### 5. Run checks
 
 ```bash
-npx wrangler deploy
+npm run check
+npm test
 ```
 
-## 🔑 Environment Variables
+### 6. Deploy
+
+```bash
+npm run deploy
+```
+
+## Environment Variables
 
 See `.dev.vars.example` for the full list.
 
@@ -83,7 +114,9 @@ Main variables:
 - `TUYA_BASE` → Tuya API base URL
 - `TELEGRAM_BOT_TOKEN` → Telegram bot token
 - `TELEGRAM_CHAT_ID` → Chat ID for alerts
-- `DASHBOARD_ACCESS_TOKEN` → Token required to access API and dashboard
+- `DEVICE_REGISTRY_JSON` → JSON array with monitored devices
+- `AUTOMATIONS_JSON` → JSON array with automation rules
+- `DASHBOARD_ACCESS_TOKEN` → Reserved for dashboard/API access control
 
 Optional:
 
@@ -93,20 +126,46 @@ Optional:
 - `OFFLINE_COOLDOWN_MINUTES`
 - `SENSOR_COOLDOWN_MINUTES`
 - `HISTORY_MAX_POINTS`
+- `HISTORY_MIN_INTERVAL_MINUTES`
+- `HISTORY_MIN_DELTA_PERCENT`
+- `DASHBOARD_STALE_AFTER_MINUTES`
 
-## 📊 Endpoints
+## Endpoints
 
 - `/dashboard` → Web UI
-- `/api/status` → Current state (requires token)
-- `/api/history` → Device history (requires token)
+- `/api/status` → Current state
+- `/api/history` → Device history
 
-Authentication example:
+Access control is not enabled yet. Do not expose a production Worker URL broadly until authentication is added.
+
+Planned authentication format:
 
 ```
 Authorization: Bearer YOUR_TOKEN
 ```
 
-## 🧠 How It Works
+## GitHub Actions Deploy
+
+The deploy workflow generates `wrangler.toml` from `wrangler.example.toml` and deploys on pushes to `main`.
+
+Configure these repository secrets before enabling public deployment:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_KV_NAMESPACE_ID`
+
+Runtime secrets and variables such as Tuya credentials, Telegram credentials, device registry, and automations should be configured in Cloudflare Workers settings or with Wrangler secrets/vars. Do not commit them.
+
+## Production Checklist
+
+- Replace all example values in `.dev.vars` and `wrangler.toml`
+- Configure Cloudflare KV and repository secrets
+- Keep `LOG_FULL_PAYLOAD=false`
+- Keep `DRY_RUN=true` until Telegram alerts are verified
+- Avoid real device IDs, locations, and operational data in issues, screenshots, examples, or commits
+- Add dashboard/API authentication before exposing the Worker URL broadly
+
+## How It Works
 
 - Worker runs on schedule (cron)
 - Fetches device data from Tuya API
@@ -115,7 +174,7 @@ Authorization: Bearer YOUR_TOKEN
 - Sends alerts via Telegram
 - Dashboard fetches sanitized data via API
 
-## 🏢 Positioning: Condo Sentinel vs Home Assistant
+## Positioning: Condo Sentinel vs Home Assistant
 
 Condo Sentinel is not intended to replace Home Assistant as a full smart home
 platform. Home Assistant is the better choice when you need a local automation
@@ -161,18 +220,19 @@ In short: Home Assistant is a mainstream smart home platform. Condo Sentinel is 
 focused infrastructure monitor for cases where a small, opinionated, low-touch
 alerting system is more appropriate than a full automation platform.
 
-## ⚠️ Important Notes
+## Important Notes
 
 - Do NOT commit `.dev.vars`
+- Do NOT commit `wrangler.toml`
 - Do NOT expose real device IDs or secrets
 - Keep `LOG_FULL_PAYLOAD=false` in production
-- Protect access token carefully
+- Treat dashboard/API URLs as sensitive until authentication is implemented
 
-## 📌 Status
+## Status
 
 Initial version — evolving into a reusable IoT monitoring platform.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 

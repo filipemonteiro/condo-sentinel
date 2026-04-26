@@ -5,6 +5,7 @@
 
 import { getTuyaDeviceStatus, buildBatchDeviceMap, getAllDevicesBatchInfo } from './tuya.js';
 import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo } from './utils.js';
+import { appendDeviceHistory } from './history.js';
 
 /**
  * Processa todos os devices habilitados

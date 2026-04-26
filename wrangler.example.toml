@@ -12,3 +12,10 @@ crons = ["*/5 * * * *"]
 [vars]
 APP_NAME = "IoT Sentinel"
 DASHBOARD_TITLE = "Dashboard IoT monitors"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true

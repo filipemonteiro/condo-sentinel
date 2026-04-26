@@ -113,6 +113,52 @@ Authorization: Bearer YOUR_TOKEN
 - Sends alerts via Telegram
 - Dashboard fetches sanitized data via API
 
+## 🏢 Positioning: Condo Sentinel vs Home Assistant
+
+Condo Sentinel is not intended to replace Home Assistant as a full smart home
+platform. Home Assistant is the better choice when you need a local automation
+hub with rich dashboards, many integrations, Zigbee/Z-Wave/Matter/MQTT support,
+manual controls, scenes, local-first automations, and a large ecosystem.
+
+This project has a different proposal: it is a lightweight, serverless sentinel
+for shared infrastructure.
+
+It is a better fit when the goal is to monitor a small operational environment,
+such as a condo, pump room, water tank, garage, utility area, or small facility,
+and answer questions like:
+
+- Is the water level too low?
+- Did a gas or leak sensor enter alarm state?
+- Did a critical device go offline?
+- Is a sensor returning invalid readings?
+- Should the caretaker, manager, or maintenance team be notified?
+
+Instead of running and maintaining a local server, Condo Sentinel runs on
+Cloudflare Workers, reads Tuya Cloud device data on a schedule, stores compact
+state/history in KV, and sends Telegram alerts with cooldowns and noise
+reduction.
+
+### When Condo Sentinel makes more sense
+
+- You want monitoring and alerting, not a full home automation hub
+- Devices are already connected through Tuya Cloud
+- The environment is shared or operational, not a single private home
+- You prefer a small serverless deployment over maintaining a Raspberry Pi or VM
+- Alerts for maintenance staff matter more than advanced dashboard customization
+- The system should be simple enough for non-technical stakeholders to understand
+
+### When Home Assistant makes more sense
+
+- You need automations to keep working locally without internet
+- You use many device protocols or vendors
+- You need manual device control, scenes, users, and advanced dashboards
+- You want a broad smart home ecosystem instead of a focused monitoring service
+- You need deep local integrations with MQTT, ESPHome, Zigbee, Z-Wave, or Matter
+
+In short: Home Assistant is a mainstream smart home platform. Condo Sentinel is a
+focused infrastructure monitor for cases where a small, opinionated, low-touch
+alerting system is more appropriate than a full automation platform.
+
 ## ⚠️ Important Notes
 
 - Do NOT commit `.dev.vars`

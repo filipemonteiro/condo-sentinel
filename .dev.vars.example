@@ -27,9 +27,12 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 # 🔐 DASHBOARD / API SECURITY
 ########################################
 
-# Token obrigatório para acessar /api/status e /api/history
+# Token obrigatório para acessar os dados do dashboard/API
 # Gere com: openssl rand -hex 32
 DASHBOARD_ACCESS_TOKEN=your_secure_random_token
+
+# Tempo máximo de inatividade da sessão do dashboard
+DASHBOARD_SESSION_TIMEOUT_MINUTES=30
 
 
 ########################################

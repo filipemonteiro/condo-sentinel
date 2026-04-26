@@ -69,7 +69,9 @@ export async function buildDashboardStatus(env) {
 /**
  * Retorna HTML do dashboard
  */
-export function renderDashboardHtml() {
+export function renderDashboardHtml(options = {}) {
+  const sessionTimeoutMinutes = Math.max(1, toInt(options.sessionTimeoutMinutes, 30));
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -135,21 +137,164 @@ export function renderDashboardHtml() {
       margin-top: 12px;
       max-height: 180px;
     }
+    .auth-screen {
+      align-items: center;
+      background: #f4f6f8;
+      display: none;
+      inset: 0;
+      justify-content: center;
+      padding: 20px;
+      position: fixed;
+      z-index: 10;
+    }
+    .auth-screen.active {
+      display: flex;
+    }
+    .auth-box {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+      max-width: 380px;
+      padding: 24px;
+      width: 100%;
+    }
+    .auth-box h2 {
+      font-size: 20px;
+      margin: 0 0 8px;
+    }
+    .auth-box input {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 16px;
+      margin-top: 16px;
+      padding: 12px;
+      width: 100%;
+    }
+    .auth-box button {
+      background: #0f172a;
+      border: 0;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: bold;
+      margin-top: 12px;
+      padding: 12px;
+      width: 100%;
+    }
+    .auth-error {
+      color: #991b1b;
+      display: none;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+    .app-shell.locked {
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>IoT - Sensores e automações</h1>
-    <div class="muted" style="color:#cbd5e1;">Visão atual dos dispositivos e histórico recente</div>
-  </header>
+  <div id="auth-screen" class="auth-screen">
+    <form id="auth-form" class="auth-box">
+      <h2>Acesso ao dashboard</h2>
+      <div class="muted">Informe o token configurado para visualizar os dados.</div>
+      <input id="dashboard-token" type="password" autocomplete="current-password" placeholder="Token de acesso" />
+      <button type="submit">Entrar</button>
+      <div id="auth-error" class="auth-error"></div>
+    </form>
+  </div>
 
-  <main>
-    <section id="summary" class="summary"></section>
-    <section id="devices" class="device-grid"></section>
-  </main>
+  <div id="app-shell" class="app-shell locked">
+    <header>
+      <h1>IoT - Sensores e automações</h1>
+      <div class="muted" style="color:#cbd5e1;">Visão atual dos dispositivos e histórico recente</div>
+    </header>
+
+    <main>
+      <section id="summary" class="summary"></section>
+      <section id="devices" class="device-grid"></section>
+    </main>
+  </div>
 
   <script>
     const charts = {};
+    const SESSION_TIMEOUT_MS = ${sessionTimeoutMinutes} * 60 * 1000;
+    const TOKEN_STORAGE_KEY = 'condoSentinel.dashboardToken';
+    const ACTIVITY_STORAGE_KEY = 'condoSentinel.lastActivityAt';
+    let refreshTimer = null;
+
+    function getStoredToken() {
+      return sessionStorage.getItem(TOKEN_STORAGE_KEY) || '';
+    }
+
+    function getLastActivityAt() {
+      return Number(sessionStorage.getItem(ACTIVITY_STORAGE_KEY) || 0);
+    }
+
+    function hasActiveSession() {
+      const token = getStoredToken();
+      const lastActivityAt = getLastActivityAt();
+      return !!token && !!lastActivityAt && Date.now() - lastActivityAt <= SESSION_TIMEOUT_MS;
+    }
+
+    function touchSession() {
+      if (getStoredToken()) {
+        sessionStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+      }
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(ACTIVITY_STORAGE_KEY);
+    }
+
+    function showAuth(message) {
+      clearSession();
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+
+      document.getElementById('app-shell').classList.add('locked');
+      document.getElementById('auth-screen').classList.add('active');
+
+      const error = document.getElementById('auth-error');
+      error.textContent = message || '';
+      error.style.display = message ? 'block' : 'none';
+      document.getElementById('dashboard-token').focus();
+    }
+
+    function showDashboard() {
+      document.getElementById('auth-screen').classList.remove('active');
+      document.getElementById('app-shell').classList.remove('locked');
+    }
+
+    async function authenticatedFetch(url) {
+      if (!hasActiveSession()) {
+        showAuth('Sessão expirada por inatividade.');
+        throw new Error('Sessão expirada');
+      }
+
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          Authorization: 'Bearer ' + getStoredToken()
+        }
+      });
+
+      if (res.status === 401 || res.status === 503) {
+        showAuth(res.status === 503 ? 'Token não configurado no servidor.' : 'Token inválido ou sessão expirada.');
+        throw new Error('Não autorizado');
+      }
+
+      if (!res.ok) {
+        throw new Error('Erro na requisição: ' + res.status);
+      }
+
+      touchSession();
+      return res;
+    }
 
     function formatTs(ts) {
       if (!ts) return "-";
@@ -166,12 +311,12 @@ export function renderDashboardHtml() {
     }
 
     async function loadStatus() {
-      const res = await fetch('/api/status', { cache: 'no-store' });
+      const res = await authenticatedFetch('/api/status');
       return res.json();
     }
 
     async function loadHistory(deviceId) {
-      const res = await fetch('/api/history?device=' + encodeURIComponent(deviceId), { cache: 'no-store' });
+      const res = await authenticatedFetch('/api/history?device=' + encodeURIComponent(deviceId));
       return res.json();
     }
 
@@ -372,6 +517,11 @@ export function renderDashboardHtml() {
 
     async function refresh() {
       try {
+        if (!hasActiveSession()) {
+          showAuth('Sessão expirada por inatividade.');
+          return;
+        }
+
         const payload = await loadStatus();
         renderSummary(payload.summary);
         await renderDevices(payload.devices);
@@ -380,8 +530,51 @@ export function renderDashboardHtml() {
       }
     }
 
-    refresh();
-    setInterval(refresh, 60000);
+    async function startDashboard() {
+      showDashboard();
+      touchSession();
+      await refresh();
+
+      if (!refreshTimer) {
+        refreshTimer = setInterval(refresh, 60000);
+      }
+    }
+
+    document.getElementById('auth-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const input = document.getElementById('dashboard-token');
+      const token = input.value.trim();
+      const error = document.getElementById('auth-error');
+
+      if (!token) {
+        error.textContent = 'Informe o token de acesso.';
+        error.style.display = 'block';
+        return;
+      }
+
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+      sessionStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+      input.value = '';
+
+      try {
+        await startDashboard();
+      } catch {
+        showAuth('Token inválido ou indisponível.');
+      }
+    });
+
+    ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach((eventName) => {
+      window.addEventListener(eventName, () => {
+        if (hasActiveSession()) touchSession();
+      }, { passive: true });
+    });
+
+    if (hasActiveSession()) {
+      startDashboard();
+    } else {
+      showAuth();
+    }
   </script>
 </body>
 </html>`;

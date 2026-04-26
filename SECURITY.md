@@ -26,4 +26,4 @@ Do not commit real values for:
 - Cloudflare account IDs, API tokens, or KV namespace IDs
 - Real device IDs, names, locations, or operational infrastructure details
 
-The dashboard and API endpoints are currently intended for controlled deployments. Add access control before exposing a production Worker URL broadly.
+Dashboard data APIs require `DASHBOARD_ACCESS_TOKEN` using a Bearer token. Use a strong random value, rotate it if exposed, and keep the Worker URL shared only with trusted operators.

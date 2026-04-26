@@ -30,4 +30,4 @@ Current state is stored per device with keys like `state:device:<device-id>`. Hi
 
 Secrets and real deployment config belong in `.dev.vars`, `wrangler.toml`, Cloudflare Worker settings, or GitHub repository secrets. These files and values should not be committed.
 
-Dashboard/API authentication is planned but not enabled in the current version, so production Worker URLs should be treated as sensitive.
+Dashboard data APIs require `Authorization: Bearer <DASHBOARD_ACCESS_TOKEN>`. The dashboard page prompts for the token only when the browser has no active session, stores it in `sessionStorage`, and clears the session after inactivity.

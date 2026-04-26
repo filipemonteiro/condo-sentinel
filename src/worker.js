@@ -14,7 +14,7 @@
  * - dashboard.js: Dashboard e APIs
  */
 
-import { parseJsonEnv, toInt, toBool, htmlResponse } from './utils.js';
+import { parseJsonEnv, toInt, toBool, htmlResponse, jsonResponse } from './utils.js';
 import { loadAllDeviceStates, saveAllDeviceStates, loadGlobalState, saveGlobalState } from './state.js';
 import { getTuyaToken } from './tuya.js';
 import { processDevices } from './devices.js';
@@ -46,6 +46,9 @@ export default {
 
     // API de status
     if (url.pathname === "/api/status") {
+      const authResponse = requireDashboardAuth(request, env);
+      if (authResponse) return authResponse;
+
       const payload = await buildDashboardStatus(env);
       return new Response(JSON.stringify(payload, null, 2), {
         status: 200,
@@ -58,6 +61,9 @@ export default {
 
     // API de histórico
     if (url.pathname === "/api/history") {
+      const authResponse = requireDashboardAuth(request, env);
+      if (authResponse) return authResponse;
+
       const deviceId = url.searchParams.get("device");
       const history = await handleApiHistory(env, deviceId);
       return history;
@@ -65,12 +71,47 @@ export default {
 
     // Dashboard HTML
     if (url.pathname === "/dashboard") {
-      return htmlResponse(renderDashboardHtml());
+      return htmlResponse(renderDashboardHtml({
+        sessionTimeoutMinutes: toInt(env.DASHBOARD_SESSION_TIMEOUT_MINUTES, 30),
+      }));
     }
 
     return new Response("Not found", { status: 404 });
   }
 };
+
+function requireDashboardAuth(request, env) {
+  const expectedToken = String(env.DASHBOARD_ACCESS_TOKEN || "").trim();
+
+  if (!expectedToken) {
+    return jsonResponse(
+      { error: "DASHBOARD_ACCESS_TOKEN is not configured." },
+      503
+    );
+  }
+
+  const authorization = request.headers.get("Authorization") || "";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+
+  if (!token || !constantTimeEqual(token, expectedToken)) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+
+  return null;
+}
+
+function constantTimeEqual(a, b) {
+  const left = String(a);
+  const right = String(b);
+  const maxLength = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+
+  for (let i = 0; i < maxLength; i += 1) {
+    diff |= left.charCodeAt(i % left.length) ^ right.charCodeAt(i % right.length);
+  }
+
+  return diff === 0;
+}
 
 /**
  * Função principal de verificação

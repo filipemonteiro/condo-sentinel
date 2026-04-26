@@ -23,7 +23,8 @@ Lightweight IoT monitoring system for condos and small infrastructures.
 - No secrets in code
 - Sensitive data stored in environment variables
 - Local Cloudflare and Tuya credentials are intentionally ignored by Git
-- Dashboard/API access control is planned, but not enabled in the current version
+- Dashboard APIs require `Authorization: Bearer <DASHBOARD_ACCESS_TOKEN>`
+- The dashboard stores the token only in browser session storage and expires after inactivity
 
 For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
 
@@ -116,7 +117,7 @@ Main variables:
 - `TELEGRAM_CHAT_ID` → Chat ID for alerts
 - `DEVICE_REGISTRY_JSON` → JSON array with monitored devices
 - `AUTOMATIONS_JSON` → JSON array with automation rules
-- `DASHBOARD_ACCESS_TOKEN` → Reserved for dashboard/API access control
+- `DASHBOARD_ACCESS_TOKEN` → Token required to access dashboard data APIs
 
 Optional:
 
@@ -129,20 +130,21 @@ Optional:
 - `HISTORY_MIN_INTERVAL_MINUTES`
 - `HISTORY_MIN_DELTA_PERCENT`
 - `DASHBOARD_STALE_AFTER_MINUTES`
+- `DASHBOARD_SESSION_TIMEOUT_MINUTES`
 
 ## Endpoints
 
 - `/dashboard` → Web UI
-- `/api/status` → Current state
-- `/api/history` → Device history
+- `/api/status` → Current state (requires token)
+- `/api/history` → Device history (requires token)
 
-Access control is not enabled yet. Do not expose a production Worker URL broadly until authentication is added.
-
-Planned authentication format:
+Authentication format:
 
 ```
 Authorization: Bearer YOUR_TOKEN
 ```
+
+The dashboard asks for the token only when there is no active browser session. After a valid token is submitted, the UI hides the token form and sends the token in API requests. Sessions expire after inactivity; configure the timeout with `DASHBOARD_SESSION_TIMEOUT_MINUTES` (default: 30).
 
 ## GitHub Actions Deploy
 
@@ -154,7 +156,7 @@ Configure these repository secrets before enabling public deployment:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_KV_NAMESPACE_ID`
 
-Runtime secrets and variables such as Tuya credentials, Telegram credentials, device registry, and automations should be configured in Cloudflare Workers settings or with Wrangler secrets/vars. Do not commit them.
+Runtime secrets and variables such as Tuya credentials, Telegram credentials, `DASHBOARD_ACCESS_TOKEN`, device registry, and automations should be configured in Cloudflare Workers settings or with Wrangler secrets/vars. Do not commit them.
 
 ## Production Checklist
 
@@ -163,7 +165,7 @@ Runtime secrets and variables such as Tuya credentials, Telegram credentials, de
 - Keep `LOG_FULL_PAYLOAD=false`
 - Keep `DRY_RUN=true` until Telegram alerts are verified
 - Avoid real device IDs, locations, and operational data in issues, screenshots, examples, or commits
-- Add dashboard/API authentication before exposing the Worker URL broadly
+- Configure `DASHBOARD_ACCESS_TOKEN` before exposing the dashboard
 
 ## How It Works
 
@@ -226,7 +228,7 @@ alerting system is more appropriate than a full automation platform.
 - Do NOT commit `wrangler.toml`
 - Do NOT expose real device IDs or secrets
 - Keep `LOG_FULL_PAYLOAD=false` in production
-- Treat dashboard/API URLs as sensitive until authentication is implemented
+- Use a strong `DASHBOARD_ACCESS_TOKEN` and rotate it if exposed
 
 ## Status
 

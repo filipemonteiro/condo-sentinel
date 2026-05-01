@@ -14,7 +14,8 @@
  * - dashboard.js: Dashboard e APIs
  */
 
-import { parseJsonEnv, toInt, toBool, htmlResponse, jsonResponse } from './utils.js';
+import { parseJsonEnv, toInt, htmlResponse, jsonResponse } from './utils.js';
+import { getConfig } from './config.js';
 import { loadAllDeviceStates, saveAllDeviceStates, loadGlobalState, saveGlobalState } from './state.js';
 import { getTuyaToken } from './tuya.js';
 import { processDevices } from './devices.js';
@@ -120,13 +121,7 @@ async function handleCheck(env) {
   const now = Date.now();
 
   // Carrega configuração
-  const cfg = {
-    dryRun: toBool(env.DRY_RUN, true),
-    logFullPayload: toBool(env.LOG_FULL_PAYLOAD, false),
-    defaultCooldownMs: toInt(env.COOLDOWN_MINUTES, 60) * 60 * 1000,
-    defaultOfflineCooldownMs: toInt(env.OFFLINE_COOLDOWN_MINUTES, 180) * 60 * 1000,
-    defaultFaultCooldownMs: toInt(env.SENSOR_COOLDOWN_MINUTES, 60) * 60 * 1000,
-  };
+  const cfg = getConfig(env);
 
   // Carrega dispositivos e automações
   const devices = parseJsonEnv(env.DEVICE_REGISTRY_JSON, []);

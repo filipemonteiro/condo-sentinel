@@ -224,6 +224,15 @@ export function renderDashboardHtml(options = {}) {
     const ACTIVITY_STORAGE_KEY = 'condoSentinel.lastActivityAt';
     let refreshTimer = null;
 
+    function escHtml(str) {
+      if (str === null || str === undefined) return '-';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function getStoredToken() {
       return sessionStorage.getItem(TOKEN_STORAGE_KEY) || '';
     }
@@ -321,7 +330,7 @@ export function renderDashboardHtml(options = {}) {
     }
 
     function card(title, value) {
-      return '<div class="card"><div class="muted">' + title + '</div><div style="font-size:28px;font-weight:bold;margin-top:8px;">' + value + '</div></div>';
+      return '<div class="card"><div class="muted">' + escHtml(title) + '</div><div style="font-size:28px;font-weight:bold;margin-top:8px;">' + escHtml(String(value)) + '</div></div>';
     }
 
     function renderSummary(summary) {
@@ -366,23 +375,23 @@ export function renderDashboardHtml(options = {}) {
 
       if (device.type === 'water_level_sensor') {
         extra = \`
-          <div><strong>Nível:</strong> \${device.lastReading?.percent ?? '-' }%</div>
-          <div><strong>Estado:</strong> \${device.lastReading?.liquidState ?? '-'}</div>
-          <div><strong>Bateria:</strong> \${device.lastReading?.battery ?? '-' }%</div>
-          <div><strong>Breach count:</strong> \${device.breachCount ?? 0}</div>
+          <div><strong>Nível:</strong> \${escHtml(device.lastReading?.percent) ?? '-' }%</div>
+          <div><strong>Estado:</strong> \${escHtml(device.lastReading?.liquidState) ?? '-'}</div>
+          <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
+          <div><strong>Breach count:</strong> \${escHtml(device.breachCount) ?? 0}</div>
           <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
           <canvas id="chart-\${device.id}"></canvas>
         \`;
       } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
         extra = \`
-          <div><strong>Alarme:</strong> \${device.lastReading?.alarmValue ?? '-'}</div>
-          <div><strong>Bateria:</strong> \${device.lastReading?.battery ?? '-' }%</div>
+          <div><strong>Alarme:</strong> \${escHtml(device.lastReading?.alarmValue) ?? '-'}</div>
+          <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
           <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
           <canvas id="chart-\${device.id}"></canvas>
         \`;
       } else if (device.type === 'valve') {
         extra = \`
-          <div><strong>Status:</strong> \${device.lastReading?.currentValue ?? '-'}</div>
+          <div><strong>Status:</strong> \${escHtml(device.lastReading?.currentValue) ?? '-'}</div>
           <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
         \`;
       } else {
@@ -391,8 +400,8 @@ export function renderDashboardHtml(options = {}) {
 
       return \`
         <div class="card">
-          <h3 style="margin-top:0;">\${device.name}</h3>
-          <div class="muted">\${device.role || '-'} • \${device.type}</div>
+          <h3 style="margin-top:0;">\${escHtml(device.name)}</h3>
+          <div class="muted">\${escHtml(device.role) || '-'} • \${escHtml(device.type)}</div>
           <div style="margin:10px 0;">\${deviceStatusBadges(device)}</div>
           <div><strong>Última checagem do worker:</strong> \${formatTs(device.lastSeenAt)}</div>
           <div><strong>Leitura registrada:</strong> \${formatTs(device.readingUpdatedAt)}</div>

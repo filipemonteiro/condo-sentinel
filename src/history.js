@@ -3,7 +3,7 @@
  * Gerenciamento de histórico dos dispositivos
  */
 
-import { toInt } from './utils.js';
+import { toInt, isAlarmLikeValue } from './utils.js';
 
 /**
  * Append ponto de histórico para um device
@@ -170,6 +170,3 @@ export async function getDeviceHistory(env, deviceId) {
     return [];
   }
 }
-
-// Import de utils para isAlarmLikeValue
-import { isAlarmLikeValue } from './utils.js';

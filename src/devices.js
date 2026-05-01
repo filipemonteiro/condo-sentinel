@@ -4,7 +4,7 @@
  */
 
 import { getTuyaDeviceStatus, buildBatchDeviceMap, getAllDevicesBatchInfo } from './tuya.js';
-import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo } from './utils.js';
+import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo, statusArrayToMap } from './utils.js';
 import { appendDeviceHistory } from './history.js';
 
 /**
@@ -399,9 +399,4 @@ export async function inspectValve(env, accessToken, device, dState, cfg, now, n
   };
 
   return reading;
-}
-
-// Funções auxiliares para statusArrayToMap
-function statusArrayToMap(resultArray) {
-  return Object.fromEntries((resultArray || []).map(item => [item.code, item.value]));
 }

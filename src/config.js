@@ -4,6 +4,8 @@
  * Todas as variáveis necessárias para o sistema
  */
 
+import { toInt, toBool, parseJsonEnv } from './utils.js';
+
 const DEFAULT_CONFIG = {
   // Comportamento
   DRY_RUN: true,
@@ -86,35 +88,11 @@ function getOptionalEnvVars() {
   ];
 }
 
-// Utils (toInt, toBool, etc) são importadas de utils.js
-function toInt(value, fallback) {
-  const n = parseInt(String(value ?? ""), 10);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function toBool(value, fallback = false) {
-  if (value === undefined || value === null || value === "") return fallback;
-  return String(value).toLowerCase() === "true";
-}
-
-function parseJsonEnv(value, fallback) {
-  if (!value) return fallback;
-  if (typeof value === "object") return value;
-  if (!String(value).trim()) return fallback;
-  try {
-    return JSON.parse(value);
-  } catch (err) {
-    console.error("Erro ao fazer parse do JSON de env:", value);
-    return fallback;
-  }
-}
-
 export default {
   DEFAULT_CONFIG,
   getConfig,
   getRequiredEnvVars,
   getOptionalEnvVars,
-  toInt,
-  toBool,
-  parseJsonEnv,
 };
+
+export { getConfig };

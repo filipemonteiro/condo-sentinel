@@ -4,6 +4,9 @@
  */
 
 import { toInt } from './utils.js';
+import { mergeAutomationStateDefaults } from './state.js';
+
+export { mergeAutomationStateDefaults };
 
 /**
  * Avalia todas as automações habilitadas
@@ -103,16 +106,4 @@ export function getAutomationKey(rule) {
   const sourceRoles = Array.isArray(rule.sourceRoles) ? rule.sourceRoles.join("_") : "no_sources";
 
   return `${type}__${targetValveRole}__${sourceRoles}`;
-}
-
-/**
- * Merge defaults para estado de automação
- */
-export function mergeAutomationStateDefaults(existing) {
-  return {
-    triggerCount: 0,
-    plannedActionAlertActive: false,
-    lastPlannedActionAlertAt: 0,
-    ...(existing || {}),
-  };
 }

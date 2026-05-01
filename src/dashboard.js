@@ -380,20 +380,20 @@ export function renderDashboardHtml(options = {}) {
           <div><strong>Estado:</strong> \${escHtml(device.lastReading?.liquidState) ?? '-'}</div>
           <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
           <div><strong>Breach count:</strong> \${escHtml(device.breachCount) ?? 0}</div>
-          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
-          <canvas id="chart-\${device.id}"></canvas>
+          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
+          <canvas id="chart-\${escHtml(device.id)}"></canvas>
         \`;
       } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
         extra = \`
           <div><strong>Alarme:</strong> \${escHtml(device.lastReading?.alarmValue) ?? '-'}</div>
           <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
-          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
-          <canvas id="chart-\${device.id}"></canvas>
+          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
+          <canvas id="chart-\${escHtml(device.id)}"></canvas>
         \`;
       } else if (device.type === 'valve') {
         extra = \`
           <div><strong>Status:</strong> \${escHtml(device.lastReading?.currentValue) ?? '-'}</div>
-          <div class="small" style="margin-top:6px;">\${getReadingFreshnessText(device)}</div>
+          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
         \`;
       } else {
         extra = '<div class="muted">Tipo ainda sem visual específico.</div>';
@@ -404,8 +404,8 @@ export function renderDashboardHtml(options = {}) {
           <h3 style="margin-top:0;">\${escHtml(device.name)}</h3>
           <div class="muted">\${escHtml(device.role) || '-'} • \${escHtml(device.type)}</div>
           <div style="margin:10px 0;">\${deviceStatusBadges(device)}</div>
-          <div><strong>Última checagem do worker:</strong> \${formatTs(device.lastSeenAt)}</div>
-          <div><strong>Leitura registrada:</strong> \${formatTs(device.readingUpdatedAt)}</div>
+          <div><strong>Última checagem do worker:</strong> \${escHtml(formatTs(device.lastSeenAt))}</div>
+          <div><strong>Leitura registrada:</strong> \${escHtml(formatTs(device.readingUpdatedAt))}</div>
           \${extra}
         </div>
       \`;

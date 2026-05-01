@@ -4,8 +4,6 @@
  * Estado isolado por device no KV
  */
 
-import { toInt } from './utils.js';
-
 /**
  * Cria estado padrão para um device
  */

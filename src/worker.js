@@ -134,6 +134,11 @@ async function handleCheck(env) {
     return;
   }
 
+  for (const device of devices) {
+    if (!device?.id) console.warn("Device sem 'id' encontrado no DEVICE_REGISTRY_JSON, será ignorado:", JSON.stringify(device));
+    if (!device?.type) console.warn(`Device "${device?.id || '(sem id)'}" sem 'type' encontrado no DEVICE_REGISTRY_JSON, será ignorado.`);
+  }
+
   const enabledDevices = devices.filter(
     device => device && device.id && device.type && device.enabled !== false
   );

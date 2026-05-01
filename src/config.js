@@ -23,6 +23,7 @@ const DEFAULT_CONFIG = {
   
   // Dashboard
   DASHBOARD_STALE_AFTER_MINUTES: 30,
+  DASHBOARD_TITLE: 'Condo Sentinel',
 };
 
 /**
@@ -39,6 +40,7 @@ function getConfig(env) {
     historyMinDeltaPercent: toInt(env.HISTORY_MIN_DELTA_PERCENT, DEFAULT_CONFIG.HISTORY_MIN_DELTA_PERCENT),
     historyMaxPoints: toInt(env.HISTORY_MAX_POINTS, DEFAULT_CONFIG.HISTORY_MAX_POINTS),
     dashboardStaleAfterMinutes: toInt(env.DASHBOARD_STALE_AFTER_MINUTES, DEFAULT_CONFIG.DASHBOARD_STALE_AFTER_MINUTES),
+    dashboardTitle: env.DASHBOARD_TITLE || DEFAULT_CONFIG.DASHBOARD_TITLE,
   };
 }
 
@@ -85,6 +87,7 @@ function getOptionalEnvVars() {
     
     // Dashboard
     { name: 'DASHBOARD_STALE_AFTER_MINUTES', default: '30', description: 'Minutos para considerar dado stale' },
+    { name: 'DASHBOARD_TITLE', default: 'Condo Sentinel', description: 'Título customizado do dashboard' },
   ];
 }
 

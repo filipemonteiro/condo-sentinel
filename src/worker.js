@@ -72,8 +72,10 @@ export default {
 
     // Dashboard HTML
     if (url.pathname === "/dashboard") {
+      const cfg = getConfig(env);
       return htmlResponse(renderDashboardHtml({
         sessionTimeoutMinutes: toInt(env.DASHBOARD_SESSION_TIMEOUT_MINUTES, 30),
+        dashboardTitle: cfg.dashboardTitle,
       }));
     }
 

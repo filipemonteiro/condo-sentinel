@@ -71,13 +71,14 @@ export async function buildDashboardStatus(env) {
  */
 export function renderDashboardHtml(options = {}) {
   const sessionTimeoutMinutes = Math.max(1, toInt(options.sessionTimeoutMinutes, 30));
+  const dashboardTitle = options.dashboardTitle || 'Condo Sentinel';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Karl Wilhelm - Dashboard de monitorias do Condomínio</title>
+  <title>${dashboardTitle} - Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -207,7 +208,7 @@ export function renderDashboardHtml(options = {}) {
 
   <div id="app-shell" class="app-shell locked">
     <header>
-      <h1>IoT - Sensores e automações</h1>
+      <h1>${dashboardTitle}</h1>
       <div class="muted" style="color:#cbd5e1;">Visão atual dos dispositivos e histórico recente</div>
     </header>
 

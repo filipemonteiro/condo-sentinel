@@ -18,6 +18,27 @@ Lightweight IoT monitoring system for condos and small infrastructures.
 - Tuya API integration
 - KV storage for state and history
 
+## Cost Model
+
+This project is designed to operate within free tiers of Cloudflare Workers and KV.
+
+### Typical Usage (Free Tier)
+
+| Resource | Approximate Daily Usage |
+|----------|------------------------|
+| Worker executions | ~288 (cron every 5 minutes) |
+| KV writes | 100–500 (optimized history/state) |
+| Tuya API calls | 300–1,000 (batched requests) |
+
+### Built-in Optimizations
+
+- **History writes**: Only on meaningful changes (configurable delta threshold)
+- **Minimum intervals**: Configurable cooldown between writes
+- **Alert cooldowns**: Reduces notification noise
+- **Batched API requests**: Groups device status queries
+
+This allows sustainable operation without paid infrastructure in small environments (up to ~10 devices).
+
 ## Security
 
 - No secrets in code

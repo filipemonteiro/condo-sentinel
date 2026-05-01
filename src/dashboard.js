@@ -67,18 +67,32 @@ export async function buildDashboardStatus(env) {
 }
 
 /**
+ * Escapa texto inserido diretamente no HTML renderizado pelo worker.
+ */
+export function escapeHtmlText(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Retorna HTML do dashboard
  */
 export function renderDashboardHtml(options = {}) {
   const sessionTimeoutMinutes = Math.max(1, toInt(options.sessionTimeoutMinutes, 30));
   const dashboardTitle = options.dashboardTitle || 'Condo Sentinel';
+  const safeDashboardTitle = escapeHtmlText(dashboardTitle);
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${dashboardTitle} - Dashboard</title>
+  <title>${safeDashboardTitle} - Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -208,7 +222,7 @@ export function renderDashboardHtml(options = {}) {
 
   <div id="app-shell" class="app-shell locked">
     <header>
-      <h1>${dashboardTitle}</h1>
+      <h1>${safeDashboardTitle}</h1>
       <div class="muted" style="color:#cbd5e1;">Visão atual dos dispositivos e histórico recente</div>
     </header>
 
@@ -231,7 +245,8 @@ export function renderDashboardHtml(options = {}) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function getStoredToken() {

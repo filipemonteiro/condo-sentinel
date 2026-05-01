@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import worker from '../src/worker.js';
-import { renderDashboardHtml } from '../src/dashboard.js';
+import { escapeHtmlText, renderDashboardHtml } from '../src/dashboard.js';
 
 const env = {
   DASHBOARD_ACCESS_TOKEN: 'secret-token',
@@ -58,4 +58,19 @@ test('dashboard includes session timeout and token form shell', () => {
   assert.match(html, /id="auth-form"/);
   assert.match(html, /sessionStorage/);
   assert.match(html, /Authorization: 'Bearer '/);
+});
+
+test('dashboard escapes configured title before rendering HTML', () => {
+  assert.equal(
+    escapeHtmlText('<script>alert("x")</script>\''),
+    '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&#39;'
+  );
+
+  const html = renderDashboardHtml({
+    dashboardTitle: '<img src=x onerror=alert("x")>',
+  });
+
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x onerror=alert\(&quot;x&quot;\)&gt;/);
+  assert.match(html, /replace\(\/'\/g, '&#39;'\)/);
 });

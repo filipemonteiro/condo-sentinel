@@ -80,7 +80,6 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
   dState.lastSeenAt = now;
   dState.lastBatchIsOnline = batchDeviceInfo?.is_online ?? null;
   dState.lastBatchInfo = sanitizeBatchInfo(batchDeviceInfo);
-  dState.apiFaultActive = false;
 
   const offlineCooldownMs = device.offlineCooldownMinutes
     ? device.offlineCooldownMinutes * 60 * 1000
@@ -98,6 +97,8 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       dState.offlineAlertActive = true;
       dState.lastOfflineAlertAt = now;
     }
+
+    dState.apiFaultActive = false;
 
     return {
       online: false,
@@ -177,6 +178,8 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       console.warn(`Tipo de device não suportado ainda: ${device.type}`);
       break;
   }
+
+  dState.apiFaultActive = false;
 
   return {
     online: true,

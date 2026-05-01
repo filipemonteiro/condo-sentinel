@@ -57,6 +57,23 @@ test('skips history when nothing meaningful changed before interval', () => {
   );
 });
 
+test('appends history when minimum interval is reached without relevant delta', () => {
+  const device = { type: 'water_level_sensor' };
+  const last = { ts: 0, online: true, percent: 50, state: 'normal', valid: true };
+  const next = { ts: 15 * 60_000, online: true, percent: 51, state: 'normal', valid: true };
+
+  assert.equal(
+    shouldAppendHistoryPoint({
+      device,
+      last,
+      next,
+      minIntervalMs: 15 * 60_000,
+      minDeltaPercent: 2,
+    }),
+    true
+  );
+});
+
 test('appends history when availability changes', () => {
   assert.equal(
     shouldAppendHistoryPoint({

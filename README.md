@@ -25,6 +25,8 @@ Lightweight IoT monitoring system for condos and small infrastructures.
 - Local Cloudflare and Tuya credentials are intentionally ignored by Git
 - Dashboard APIs require `Authorization: Bearer <DASHBOARD_ACCESS_TOKEN>`
 - The dashboard stores the token only in browser session storage and expires after inactivity
+- The `/dashboard` HTML shell is public, but device data endpoints require the bearer token
+- Security headers are sent on dashboard/API responses; the dashboard loads Chart.js from jsDelivr
 
 For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
 
@@ -163,6 +165,7 @@ Runtime secrets and variables such as Tuya credentials, Telegram credentials, `D
 - Replace all example values in `.dev.vars` and `wrangler.toml`
 - Configure Cloudflare KV and repository secrets
 - Keep `LOG_FULL_PAYLOAD=false`
+- Keep request-level invocation logs disabled unless actively debugging
 - Keep `DRY_RUN=true` until Telegram alerts are verified
 - Avoid real device IDs, locations, and operational data in issues, screenshots, examples, or commits
 - Configure `DASHBOARD_ACCESS_TOKEN` before exposing the dashboard
@@ -228,6 +231,7 @@ alerting system is more appropriate than a full automation platform.
 - Do NOT commit `wrangler.toml`
 - Do NOT expose real device IDs or secrets
 - Keep `LOG_FULL_PAYLOAD=false` in production
+- Do not paste payloads from Tuya, Telegram, Cloudflare logs, or dashboard screenshots into public issues
 - Use a strong `DASHBOARD_ACCESS_TOKEN` and rotate it if exposed
 
 ## Status

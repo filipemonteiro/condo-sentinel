@@ -31,3 +31,7 @@ Current state is stored per device with keys like `state:device:<device-id>`. Hi
 Secrets and real deployment config belong in `.dev.vars`, `wrangler.toml`, Cloudflare Worker settings, or GitHub repository secrets. These files and values should not be committed.
 
 Dashboard data APIs require `Authorization: Bearer <DASHBOARD_ACCESS_TOKEN>`. The dashboard page prompts for the token only when the browser has no active session, stores it in `sessionStorage`, and clears the session after inactivity.
+
+The dashboard HTML route is intentionally unauthenticated, but it should remain a static shell with no embedded device data, secrets, or deployment identifiers. The runtime data flow should stay behind `/api/status` and `/api/history`.
+
+Production logs should avoid raw Tuya payloads, dashboard data, device IDs, and location names. `LOG_FULL_PAYLOAD` is only for short-lived local debugging with synthetic or carefully controlled data.

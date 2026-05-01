@@ -54,7 +54,7 @@ DASHBOARD_STALE_AFTER_MINUTES=30
 # Se true, não envia notificações (modo teste)
 DRY_RUN=true
 
-# Loga payload completo da Tuya (NÃO usar em produção)
+# Loga payload completo da Tuya (NÃO usar em produção; pode conter dados operacionais)
 LOG_FULL_PAYLOAD=false
 
 

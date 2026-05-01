@@ -63,7 +63,7 @@ export async function getTuyaToken(env) {
   const data = await res.json();
 
   if (!data.success || !data.result?.access_token) {
-    throw new Error(`Falha ao obter token da Tuya: ${JSON.stringify(data)}`);
+    throw new Error(`Falha ao obter token da Tuya: ${summarizeTuyaError(data)}`);
   }
 
   const token = data.result.access_token;
@@ -140,7 +140,7 @@ export async function getTuyaDeviceStatus(env, accessToken, deviceId, logFullPay
   }
 
   if (!data.success || !Array.isArray(data.result)) {
-    throw new Error(`Resposta inválida de status da Tuya para ${deviceId}: ${JSON.stringify(data)}`);
+    throw new Error(`Resposta inválida de status da Tuya para ${redactIdentifier(deviceId)}: ${summarizeTuyaError(data)}`);
   }
 
   return data;
@@ -178,7 +178,7 @@ export async function getTuyaDevicesBatchInfo(env, accessToken, deviceIds, logFu
   }
 
   if (!data.success || !Array.isArray(data.result)) {
-    throw new Error(`Resposta inválida do batch da Tuya: ${JSON.stringify(data)}`);
+    throw new Error(`Resposta inválida do batch da Tuya: ${summarizeTuyaError(data)}`);
   }
 
   return data.result;
@@ -210,4 +210,23 @@ export function buildBatchDeviceMap(batchResult) {
     }
   }
   return map;
+}
+
+function summarizeTuyaError(data) {
+  if (!data || typeof data !== "object") return "resposta vazia ou inválida";
+
+  const summary = {
+    success: data.success === true,
+    code: data.code ?? null,
+    msg: data.msg ?? data.message ?? null,
+    tid: data.tid ?? null,
+  };
+
+  return JSON.stringify(summary);
+}
+
+function redactIdentifier(value) {
+  const text = String(value || "");
+  if (text.length <= 6) return "[redacted]";
+  return `${text.slice(0, 3)}...${text.slice(-3)}`;
 }

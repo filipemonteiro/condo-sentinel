@@ -44,7 +44,7 @@ export async function loadDeviceState(env, deviceId) {
     try {
       return JSON.parse(raw);
     } catch {
-      console.warn(`Estado corrompido para device ${deviceId}, usando padrão.`);
+      console.warn("Estado corrompido para device, usando padrão. ID omitido por segurança.");
     }
   }
   
@@ -57,7 +57,7 @@ export async function loadDeviceState(env, deviceId) {
       if (globalState.devices && globalState.devices[deviceId]) {
         const migrated = globalState.devices[deviceId];
         await saveDeviceState(env, deviceId, migrated);
-        console.log(`Migrado estado para device ${deviceId}.`);
+        console.log("Migrado estado legado para device. ID omitido por segurança.");
         return migrated;
       }
     } catch {

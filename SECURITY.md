@@ -27,3 +27,7 @@ Do not commit real values for:
 - Real device IDs, names, locations, or operational infrastructure details
 
 Dashboard data APIs require `DASHBOARD_ACCESS_TOKEN` using a Bearer token. Use a strong random value, rotate it if exposed, and keep the Worker URL shared only with trusted operators.
+
+The `/dashboard` route serves a public HTML shell so operators can enter the token in the browser. It should not include secrets or operational data in the initial HTML. Device state and history must stay behind the authenticated API routes.
+
+Keep `LOG_FULL_PAYLOAD=false` in production. Tuya, Telegram, Cloudflare, and browser logs may contain operational data even when secrets are redacted, so do not paste raw logs into public issues or pull requests.

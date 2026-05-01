@@ -16,8 +16,8 @@ export async function sendTelegramMessage(env, message, dryRun = false) {
 
   if (dryRun) {
     console.log("DRY_RUN ativo. Mensagem Telegram não enviada.", {
-      chatId: env.TELEGRAM_CHAT_ID,
-      message,
+      chatIdConfigured: true,
+      messageLength: String(message || "").length,
     });
     return;
   }
@@ -40,8 +40,18 @@ export async function sendTelegramMessage(env, message, dryRun = false) {
   const data = await res.json();
 
   if (!res.ok || data.ok !== true) {
-    throw new Error(`Erro ao enviar mensagem no Telegram: ${JSON.stringify(data)}`);
+    throw new Error(`Erro ao enviar mensagem no Telegram: ${summarizeTelegramError(data)}`);
   }
 
   console.log("Mensagem enviada ao Telegram com sucesso.");
+}
+
+function summarizeTelegramError(data) {
+  if (!data || typeof data !== "object") return "resposta vazia ou inválida";
+
+  return JSON.stringify({
+    ok: data.ok === true,
+    error_code: data.error_code ?? null,
+    description: data.description ?? null,
+  });
 }

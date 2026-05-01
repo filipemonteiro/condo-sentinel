@@ -49,7 +49,7 @@ export async function processDevices(env, accessToken, enabledDevices, deviceSta
 
       await appendDeviceHistory(env, device, result.reading, result.online, now);
     } catch (err) {
-      console.error(`Erro processando device ${device.name || device.id}:`, err);
+      console.error(`Erro processando device do tipo ${device.type || "desconhecido"}:`, err);
 
       const dState = deviceStates[device.id];
       const cooldownMs = device.faultCooldownMinutes
@@ -175,7 +175,7 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       break;
 
     default:
-      console.warn(`Tipo de device não suportado ainda: ${device.type}`);
+      console.warn("Tipo de device não suportado ainda:", device.type || "desconhecido");
       break;
   }
 

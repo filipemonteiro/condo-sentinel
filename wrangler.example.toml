@@ -16,4 +16,5 @@ enabled = true
 
 [observability.logs]
 enabled = true
-invocation_logs = true
+# Keep request-level invocation logs off by default to reduce operational metadata in logs.
+invocation_logs = false

@@ -37,7 +37,7 @@ export function parseJsonEnv(value, fallback) {
   try {
     return JSON.parse(value);
   } catch (err) {
-    console.error("Erro ao fazer parse do JSON de env:", value);
+    console.error("Erro ao fazer parse do JSON de env. Valor omitido por segurança.");
     console.error("Detalhe:", stringifyError(err));
     return fallback;
   }
@@ -165,6 +165,7 @@ export function jsonResponse(data, status = 200) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      ...securityHeaders(),
     },
   });
 }
@@ -178,6 +179,28 @@ export function htmlResponse(html, status = 200) {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
+      ...securityHeaders({
+        "Content-Security-Policy": [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "base-uri 'none'",
+          "frame-ancestors 'none'",
+        ].join("; "),
+      }),
     },
   });
+}
+
+export function securityHeaders(extra = {}) {
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    ...extra,
+  };
 }

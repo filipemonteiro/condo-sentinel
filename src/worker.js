@@ -51,13 +51,7 @@ export default {
       if (authResponse) return authResponse;
 
       const payload = await buildDashboardStatus(env);
-      return new Response(JSON.stringify(payload, null, 2), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store",
-        },
-      });
+      return jsonResponse(payload);
     }
 
     // API de histórico
@@ -135,8 +129,8 @@ async function handleCheck(env) {
   }
 
   for (const device of devices) {
-    if (!device?.id) console.warn("Device sem 'id' encontrado no DEVICE_REGISTRY_JSON, será ignorado:", JSON.stringify(device));
-    if (!device?.type) console.warn(`Device "${device?.id || '(sem id)'}" sem 'type' encontrado no DEVICE_REGISTRY_JSON, será ignorado.`);
+    if (!device?.id) console.warn("Device sem 'id' encontrado no DEVICE_REGISTRY_JSON, será ignorado. Dados omitidos por segurança.");
+    if (!device?.type) console.warn("Device sem 'type' encontrado no DEVICE_REGISTRY_JSON, será ignorado. ID omitido por segurança.");
   }
 
   const enabledDevices = devices.filter(

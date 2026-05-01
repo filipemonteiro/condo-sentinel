@@ -31,10 +31,10 @@ export async function evaluateAutomations({ automations, state, now, notificatio
           evaluateWaterReserveControl(rule, aState, context, now, notifications);
           break;
         default:
-          console.warn(`Tipo de automação não suportado ainda: ${rule.type}`);
+          console.warn("Tipo de automação não suportado ainda:", rule.type);
       }
     } catch (err) {
-      console.error(`Erro avaliando automação ${rule.id || "(sem id)"}`, err);
+      console.error("Erro avaliando automação. ID omitido por segurança.", err);
     }
   }
 }

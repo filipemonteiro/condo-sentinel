@@ -46,6 +46,8 @@ test('allows API requests with valid bearer token', async () => {
   );
 
   assert.equal(res.status, 200);
+  assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(res.headers.get('Referrer-Policy'), 'no-referrer');
 
   const payload = await res.json();
   assert.equal(payload.summary.totalDevices, 0);
@@ -58,6 +60,16 @@ test('dashboard includes session timeout and token form shell', () => {
   assert.match(html, /id="auth-form"/);
   assert.match(html, /sessionStorage/);
   assert.match(html, /Authorization: 'Bearer '/);
+});
+
+test('dashboard response includes defensive browser headers', async () => {
+  const res = await worker.fetch(new Request('https://example.com/dashboard'), env, {});
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('X-Frame-Options'), 'DENY');
+  assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.match(res.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/);
+  assert.match(res.headers.get('Content-Security-Policy'), /https:\/\/cdn\.jsdelivr\.net/);
 });
 
 test('dashboard escapes configured title before rendering HTML', () => {

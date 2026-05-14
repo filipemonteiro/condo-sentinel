@@ -104,7 +104,7 @@ test('dashboard context returns admin role from Cloudflare Access email', async 
     new Request('https://example.com/api/dashboard-context', {
       headers: {
         Authorization: 'Bearer secret-token',
-        'CF-Access-Client-Email': 'admin@example.test',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
       },
     }),
     {
@@ -132,7 +132,7 @@ test('saving dashboard config does not clear saved users when users are omitted'
       method: 'POST',
       headers: {
         Authorization: 'Bearer secret-token',
-        'CF-Access-Client-Email': 'admin@example.test',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ config: { DASHBOARD_TITLE: 'Updated title' } }),

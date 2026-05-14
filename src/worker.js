@@ -162,7 +162,11 @@ function requireDashboardAuth(request, env) {
 }
 
 async function getDashboardUser(request, env) {
-  const emailHeader = String(request.headers.get('CF-Access-Client-Email') || '').trim();
+  const emailHeader = String(
+    request.headers.get('Cf-Access-Authenticated-User-Email') ||
+    request.headers.get('CF-Access-Client-Email') ||
+    ''
+  ).trim();
   const email = emailHeader ? emailHeader.toLowerCase() : null;
 
   const savedUsers = await loadDashboardUserMappings(env);

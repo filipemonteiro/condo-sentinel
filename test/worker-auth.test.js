@@ -16,6 +16,18 @@ const env = {
   },
 };
 
+const historyEnv = {
+  ...env,
+  STATE: {
+    async get(key) {
+      if (key === 'history:device:device-test') {
+        return JSON.stringify([{ ts: 1000, type: 'water_level_sensor', online: true, percent: 80 }]);
+      }
+      return null;
+    },
+  },
+};
+
 test('rejects API requests without bearer token', async () => {
   const res = await worker.fetch(new Request('https://example.com/api/status'), env, {});
 
@@ -51,6 +63,24 @@ test('allows API requests with valid bearer token', async () => {
 
   const payload = await res.json();
   assert.equal(payload.summary.totalDevices, 0);
+});
+
+test('history API returns points envelope expected by dashboard charts', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/history?device=device-test', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+      },
+    }),
+    historyEnv,
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), {
+    deviceId: 'device-test',
+    points: [{ ts: 1000, type: 'water_level_sensor', online: true, percent: 80 }],
+  });
 });
 
 test('dashboard includes session timeout and token form shell', () => {

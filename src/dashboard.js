@@ -93,5 +93,8 @@ export async function handleApiHistory(env, deviceId) {
   }
 
   const history = await getDeviceHistory(env, deviceId);
-  return jsonResponse(history);
+  return jsonResponse({
+    deviceId,
+    points: history,
+  });
 }

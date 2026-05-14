@@ -11,9 +11,8 @@ export function renderDashboardHtml(options = {}) {
   const sessionTimeoutMinutes = Math.max(1, options.sessionTimeoutMinutes || 30);
   const dashboardTitle = options.dashboardTitle || 'Condo Sentinel';
   const safeDashboardTitle = escapeHtmlText(dashboardTitle);
-  const userRole = options.userRole || 'viewer';
   const css = dashboardCss;
-  const js = dashboardJs({ sessionTimeoutMinutes, userRole });
+  const js = dashboardJs({ sessionTimeoutMinutes });
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -43,7 +42,6 @@ export function renderDashboardHtml(options = {}) {
       </div>
       <nav class="menu">
         <button data-section="dashboard" class="active">Dashboard</button>
-        ${userRole === 'admin' ? '<button data-section="config">Configurações</button>' : ''}
       </nav>
     </header>
 
@@ -53,13 +51,11 @@ export function renderDashboardHtml(options = {}) {
         <div id="devices" class="device-grid"></div>
       </section>
 
-      ${userRole === 'admin' ? `
       <section id="config" class="section">
         <div class="card config-form" id="config-form">
           <!-- Config form will be rendered here -->
         </div>
       </section>
-      ` : ''}
     </main>
   </div>
 

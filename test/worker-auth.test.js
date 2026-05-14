@@ -28,6 +28,22 @@ const historyEnv = {
   },
 };
 
+function makeState(initial = {}) {
+  const store = new Map(Object.entries(initial));
+
+  return {
+    store,
+    STATE: {
+      async get(key) {
+        return store.get(key) ?? null;
+      },
+      async put(key, value) {
+        store.set(key, value);
+      },
+    },
+  };
+}
+
 test('rejects API requests without bearer token', async () => {
   const res = await worker.fetch(new Request('https://example.com/api/status'), env, {});
 
@@ -81,6 +97,62 @@ test('history API returns points envelope expected by dashboard charts', async (
     deviceId: 'device-test',
     points: [{ ts: 1000, type: 'water_level_sensor', online: true, percent: 80 }],
   });
+});
+
+test('dashboard context returns admin role from Cloudflare Access email', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'CF-Access-Client-Email': 'admin@example.test',
+      },
+    }),
+    {
+      ...env,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(payload.currentUser.role, 'admin');
+  assert.equal(payload.users.length, 1);
+});
+
+test('saving dashboard config does not clear saved users when users are omitted', async () => {
+  const state = makeState({
+    'dashboard:runtime:user-roles': JSON.stringify([
+      { email: 'admin@example.test', role: 'admin' },
+    ]),
+  });
+
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'CF-Access-Client-Email': 'admin@example.test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ config: { DASHBOARD_TITLE: 'Updated title' } }),
+    }),
+    {
+      ...env,
+      ...state,
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(
+    JSON.parse(state.store.get('dashboard:runtime:user-roles')),
+    [{ email: 'admin@example.test', role: 'admin' }]
+  );
+  assert.deepEqual(
+    JSON.parse(state.store.get('dashboard:runtime:config')),
+    { DASHBOARD_TITLE: 'Updated title' }
+  );
 });
 
 test('dashboard includes session timeout and token form shell', () => {

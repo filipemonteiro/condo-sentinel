@@ -5,7 +5,6 @@
 
 export function dashboardJs(options) {
   const sessionTimeoutMinutes = Math.max(1, options.sessionTimeoutMinutes || 30);
-  const userRole = options.userRole || 'viewer';
 
   return `
     const charts = {};
@@ -14,6 +13,7 @@ export function dashboardJs(options) {
     const ACTIVITY_STORAGE_KEY = 'condoSentinel.lastActivityAt';
     let refreshTimer = null;
     let currentSection = 'dashboard';
+    let currentDashboardContext = null;
 
     function escHtml(str) {
       if (str === null || str === undefined) return '-';
@@ -126,6 +126,30 @@ export function dashboardJs(options) {
       document.querySelectorAll('.menu button').forEach(btn => btn.classList.remove('active'));
       document.querySelector('[data-section="' + section + '"]').classList.add('active');
       currentSection = section;
+    }
+
+    function bindMenu() {
+      document.querySelectorAll('.menu button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const section = btn.getAttribute('data-section');
+          if (section === 'dashboard') {
+            renderDashboard();
+          } else if (section === 'config' && currentDashboardContext?.currentUser?.role === 'admin') {
+            renderConfigForm(currentDashboardContext.config || {});
+          }
+          showSection(section);
+        });
+      });
+    }
+
+    function renderMenu(context) {
+      const menu = document.querySelector('.menu');
+      const isAdmin = context?.currentUser?.role === 'admin';
+      menu.innerHTML = [
+        '<button data-section="dashboard" class="active">Dashboard</button>',
+        isAdmin ? '<button data-section="config">Configurações</button>' : ''
+      ].join('');
+      bindMenu();
     }
 
     async function loadStatus() {
@@ -350,24 +374,30 @@ export function dashboardJs(options) {
 
     function renderConfigForm(config) {
       const form = document.getElementById('config-form');
+      const title = config.DASHBOARD_TITLE || config.dashboardTitle || '';
       form.innerHTML = \`
         <label>Título do Dashboard:</label>
-        <input type="text" id="config-title" value="\${escHtml(config.dashboardTitle || '')}">
+        <input type="text" id="config-title" value="\${escHtml(title)}">
         <button type="button" onclick="saveConfigForm()">Salvar</button>
       \`;
-      document.getElementById('config-title').value = config.dashboardTitle || '';
+      document.getElementById('config-title').value = title;
     }
 
     async function loadAndRenderConfig() {
-      const config = await loadConfig();
-      renderConfigForm(config);
+      currentDashboardContext = await loadConfig();
+      renderMenu(currentDashboardContext);
+      renderConfigForm(currentDashboardContext.config || {});
     }
 
     async function saveConfigForm() {
       try {
         const title = document.getElementById('config-title').value.trim();
-        const result = await saveConfig({ dashboardTitle: title });
+        const result = await saveConfig({ config: { DASHBOARD_TITLE: title } });
         if (result.success) {
+          currentDashboardContext = {
+            ...(currentDashboardContext || {}),
+            config: result.config || {},
+          };
           alert('Configuração salva!');
         } else {
           console.error('Save failed:', result);
@@ -377,6 +407,12 @@ export function dashboardJs(options) {
         console.error('saveConfigForm failed:', err);
         alert('Erro ao salvar configuração.');
       }
+    }
+
+    async function loadDashboardShell() {
+      currentDashboardContext = await loadConfig();
+      renderMenu(currentDashboardContext);
+      await renderDashboard();
     }
 
     async function init() {
@@ -394,7 +430,7 @@ export function dashboardJs(options) {
         sessionStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
 
         try {
-          await renderDashboard();
+          await loadDashboardShell();
           showDashboard();
           refreshTimer = setInterval(() => {
             if (hasActiveSession()) {
@@ -411,23 +447,12 @@ export function dashboardJs(options) {
         }
       });
 
-      // Menu
-      document.querySelectorAll('.menu button').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const section = btn.getAttribute('data-section');
-          if (section === 'dashboard') {
-            renderDashboard();
-          } else if (section === 'config' && '${userRole}' === 'admin') {
-            loadAndRenderConfig();
-          }
-          showSection(section);
-        });
-      });
+      bindMenu();
 
       // Start with dashboard if logged in
       if (hasActiveSession()) {
         try {
-          await renderDashboard();
+          await loadDashboardShell();
           showDashboard();
           refreshTimer = setInterval(() => {
             if (hasActiveSession()) {

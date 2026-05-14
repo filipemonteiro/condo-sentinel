@@ -82,6 +82,7 @@ export default {
 
       const currentUser = await getDashboardUser(request, env);
       if (request.method === "GET") {
+        const cfg = await getConfig(env);
         const runtimeConfig = await loadDashboardRuntimeConfig(env);
         const savedUsers = await loadDashboardUserMappings(env);
         const fallbackUsers = parseJsonEnv(env.DASHBOARD_USERS_JSON, []);
@@ -91,7 +92,10 @@ export default {
 
         return jsonResponse({
           currentUser,
-          config: runtimeConfig || {},
+          config: {
+            DASHBOARD_TITLE: cfg.dashboardTitle,
+            ...(runtimeConfig || {}),
+          },
           users: currentUser.role === 'admin' ? users : [],
         });
       }
@@ -107,22 +111,26 @@ export default {
         }
 
         const runtimeConfig = body.config && typeof body.config === 'object' ? body.config : {};
-        const users = Array.isArray(body.users) ? body.users : [];
+        let normalizedUsers = null;
 
-        const normalizedUsers = users
-          .filter(u => u && u.email)
-          .map(u => ({
-            email: String(u.email).trim().toLowerCase(),
-            role: u.role === 'admin' ? 'admin' : 'viewer',
-          }));
+        if (Array.isArray(body.users)) {
+          normalizedUsers = body.users
+            .filter(u => u && u.email)
+            .map(u => ({
+              email: String(u.email).trim().toLowerCase(),
+              role: u.role === 'admin' ? 'admin' : 'viewer',
+            }));
+        }
 
         await saveDashboardRuntimeConfig(env, runtimeConfig);
-        await saveDashboardUserMappings(env, normalizedUsers);
+        if (normalizedUsers) {
+          await saveDashboardUserMappings(env, normalizedUsers);
+        }
 
         return jsonResponse({
           success: true,
           config: runtimeConfig,
-          users: normalizedUsers,
+          users: normalizedUsers || undefined,
         });
       }
 

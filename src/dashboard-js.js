@@ -14,6 +14,8 @@ export function dashboardJs(options) {
     let refreshTimer = null;
     let currentSection = 'dashboard';
     let currentDashboardContext = null;
+    let currentDashboardStatus = null;
+    const historyCache = {};
 
     function escHtml(str) {
       if (str === null || str === undefined) return '-';
@@ -134,6 +136,10 @@ export function dashboardJs(options) {
           const section = btn.getAttribute('data-section');
           if (section === 'dashboard') {
             renderDashboard();
+          } else if (section === 'history') {
+            renderHistoryPanel().catch(err => {
+              console.error('renderHistoryPanel failed:', err);
+            });
           } else if (section === 'config' && currentDashboardContext?.currentUser?.role === 'admin') {
             renderConfigForm(currentDashboardContext.config || {});
           }
@@ -147,6 +153,7 @@ export function dashboardJs(options) {
       const isAdmin = context?.currentUser?.role === 'admin';
       menu.innerHTML = [
         '<button data-section="dashboard" class="active">Dashboard</button>',
+        '<button data-section="history">Histórico</button>',
         isAdmin ? '<button data-section="config">Configurações</button>' : ''
       ].join('');
       bindMenu();
@@ -228,14 +235,12 @@ export function dashboardJs(options) {
           <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
           <div><strong>Breach count:</strong> \${escHtml(device.breachCount) ?? 0}</div>
           <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
-          <canvas id="chart-\${escHtml(device.id)}"></canvas>
         \`;
       } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
         extra = \`
           <div><strong>Alarme:</strong> \${escHtml(device.lastReading?.alarmValue) ?? '-'}</div>
           <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
           <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
-          <canvas id="chart-\${escHtml(device.id)}"></canvas>
         \`;
       } else if (device.type === 'valve') {
         extra = \`
@@ -261,13 +266,6 @@ export function dashboardJs(options) {
     async function renderDevices(devices) {
       const root = document.getElementById('devices');
       root.innerHTML = devices.map(renderDeviceCard).join('');
-
-      for (const device of devices) {
-        if (device.type === 'water_level_sensor' || device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
-          const historyPayload = await loadHistory(device.id);
-          renderChart(device, historyPayload.points || []);
-        }
-      }
     }
 
     function buildWaterDataset(points) {
@@ -357,6 +355,244 @@ export function dashboardJs(options) {
       });
     }
 
+    function getHistoryDeviceOptions() {
+      const devices = currentDashboardStatus?.devices || [];
+      return devices.filter(device =>
+        device.type === 'water_level_sensor' ||
+        device.type === 'gas_sensor' ||
+        device.type === 'water_leak_sensor' ||
+        device.type === 'valve'
+      );
+    }
+
+    function bindHistoryControls() {
+      ['history-device', 'history-range', 'history-bucket'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.bound === 'true') return;
+        el.dataset.bound = 'true';
+        el.addEventListener('change', () => {
+          renderSelectedHistory().catch(err => console.error('renderSelectedHistory failed:', err));
+        });
+      });
+
+      const refresh = document.getElementById('history-refresh');
+      if (refresh && refresh.dataset.bound !== 'true') {
+        refresh.dataset.bound = 'true';
+        refresh.addEventListener('click', () => {
+          const deviceId = document.getElementById('history-device')?.value;
+          if (deviceId) delete historyCache[deviceId];
+          renderSelectedHistory().catch(err => console.error('history refresh failed:', err));
+        });
+      }
+    }
+
+    async function renderHistoryPanel() {
+      if (!currentDashboardStatus?.devices) {
+        currentDashboardStatus = await loadStatus();
+      }
+
+      const select = document.getElementById('history-device');
+      const devices = getHistoryDeviceOptions();
+      const currentValue = select.value;
+
+      select.innerHTML = devices.map(device =>
+        '<option value="' + escHtml(device.id) + '">' + escHtml(device.name || device.id) + ' · ' + escHtml(device.type) + '</option>'
+      ).join('');
+
+      if (currentValue && devices.some(device => device.id === currentValue)) {
+        select.value = currentValue;
+      }
+
+      bindHistoryControls();
+      await renderSelectedHistory();
+    }
+
+    async function getCachedHistory(deviceId) {
+      if (!historyCache[deviceId]) {
+        const payload = await loadHistory(deviceId);
+        historyCache[deviceId] = payload.points || [];
+      }
+      return historyCache[deviceId];
+    }
+
+    function rangeStart(range, now) {
+      const ranges = {
+        '1h': 60 * 60 * 1000,
+        '6h': 6 * 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+      };
+      return ranges[range] ? now - ranges[range] : null;
+    }
+
+    function filterHistoryRange(points, range) {
+      const start = rangeStart(range, Date.now());
+      if (!start) return points;
+      return points.filter(point => Number.isFinite(point.ts) && point.ts >= start);
+    }
+
+    function bucketSizeMs(bucket) {
+      if (bucket === '15m') return 15 * 60 * 1000;
+      if (bucket === '1h') return 60 * 60 * 1000;
+      if (bucket === '6h') return 6 * 60 * 60 * 1000;
+      return null;
+    }
+
+    function aggregateHistory(points, bucket, device) {
+      const size = bucketSizeMs(bucket);
+      if (!size) return points;
+
+      const buckets = new Map();
+      for (const point of points) {
+        if (!Number.isFinite(point.ts)) continue;
+        const key = Math.floor(point.ts / size) * size;
+        const current = buckets.get(key) || {
+          ts: key,
+          type: point.type,
+          online: true,
+          count: 0,
+          percentSum: 0,
+          percentCount: 0,
+          alarm: false,
+          alarmValue: null,
+          currentValue: null,
+        };
+
+        current.count += 1;
+        current.online = current.online && point.online !== false;
+
+        if (device.type === 'water_level_sensor' && Number.isFinite(point.percent)) {
+          current.percentSum += point.percent;
+          current.percentCount += 1;
+          current.percent = Math.round((current.percentSum / current.percentCount) * 10) / 10;
+        }
+
+        if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
+          current.alarm = current.alarm || point.alarm === true;
+          current.alarmValue = point.alarmValue ?? current.alarmValue;
+        }
+
+        if (device.type === 'valve') {
+          current.currentValue = point.currentValue;
+          current.statusCode = point.statusCode ?? current.statusCode;
+        }
+
+        buckets.set(key, current);
+      }
+
+      return [...buckets.values()].sort((a, b) => a.ts - b.ts);
+    }
+
+    function summarizeHistory(points, device) {
+      if (!points.length) {
+        return [
+          card('Pontos', 0),
+          card('Primeiro ponto', '-'),
+          card('Último ponto', '-'),
+        ].join('');
+      }
+
+      const first = points[0];
+      const last = points[points.length - 1];
+      const offlineCount = points.filter(point => point.online === false).length;
+      const cards = [
+        card('Pontos', points.length),
+        card('Primeiro ponto', formatTs(first.ts)),
+        card('Último ponto', formatTs(last.ts)),
+        card('Offline', offlineCount),
+      ];
+
+      if (device.type === 'water_level_sensor') {
+        const values = points.map(point => point.percent).filter(Number.isFinite);
+        if (values.length) {
+          cards.push(card('Mínimo', Math.min(...values) + '%'));
+          cards.push(card('Máximo', Math.max(...values) + '%'));
+        }
+      } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
+        cards.push(card('Alarmes', points.filter(point => point.alarm === true).length));
+      }
+
+      return cards.join('');
+    }
+
+    function buildHistoryDataset(device, points) {
+      if (device.type === 'water_level_sensor') {
+        return buildWaterDataset(points);
+      }
+
+      if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
+        return buildBinaryDataset(points, 'Alarme');
+      }
+
+      const labels = points.map(p => new Date(p.ts).toLocaleTimeString('pt-BR'));
+      const values = points.map(p => p.currentValue === true || p.currentValue === 'true' || p.currentValue === 'on' ? 1 : 0);
+      return {
+        labels,
+        datasets: [
+          {
+            label: 'Status',
+            data: values,
+            spanGaps: true,
+            stepped: true,
+          }
+        ]
+      };
+    }
+
+    function renderHistoryChart(device, points) {
+      const el = document.getElementById('history-chart');
+      if (!el) return;
+
+      if (charts.history) {
+        charts.history.destroy();
+      }
+
+      const chartData = buildHistoryDataset(device, points);
+      chartData.datasets[0].pointStyle = buildPointStyles(points);
+      chartData.datasets[0].pointRadius = buildPointRadius(points);
+
+      const yConfig = device.type === 'water_level_sensor'
+        ? { min: 0, max: 100 }
+        : { min: 0, max: 1, ticks: { stepSize: 1 } };
+
+      charts.history = new Chart(el, {
+        type: 'line',
+        data: chartData,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: yConfig
+          }
+        }
+      });
+    }
+
+    async function renderSelectedHistory() {
+      const select = document.getElementById('history-device');
+      const summary = document.getElementById('history-summary');
+      const deviceId = select?.value;
+      const devices = getHistoryDeviceOptions();
+      const device = devices.find(item => item.id === deviceId) || devices[0];
+
+      if (!device) {
+        summary.innerHTML = '<div class="card muted">Nenhum device com histórico disponível.</div>';
+        if (charts.history) charts.history.destroy();
+        return;
+      }
+
+      if (select.value !== device.id) select.value = device.id;
+
+      const range = document.getElementById('history-range')?.value || '24h';
+      const bucket = document.getElementById('history-bucket')?.value || 'raw';
+      const rawPoints = await getCachedHistory(device.id);
+      const filtered = filterHistoryRange(rawPoints, range);
+      const points = aggregateHistory(filtered, bucket, device);
+
+      summary.innerHTML = summarizeHistory(points, device);
+      renderHistoryChart(device, points);
+    }
+
     async function renderDashboard() {
       try {
         const status = await loadStatus();
@@ -364,6 +600,7 @@ export function dashboardJs(options) {
           console.error('Invalid status response:', status);
           throw new Error('Invalid status response');
         }
+        currentDashboardStatus = status;
         renderSummary(status.summary);
         await renderDevices(status.devices);
       } catch (err) {

@@ -95,6 +95,53 @@ export const dashboardCss = `
     margin-top: 12px;
     max-height: 180px;
   }
+  .history-layout {
+    display: grid;
+    gap: 16px;
+  }
+  .history-toolbar {
+    align-items: end;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(140px, 1fr)) auto;
+  }
+  .history-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: bold;
+    margin: 0 0 6px;
+  }
+  .history-field select {
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 14px;
+    padding: 10px;
+    width: 100%;
+  }
+  .history-toolbar button {
+    background: #0f172a;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 11px 18px;
+  }
+  .history-summary {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  .history-chart-card {
+    min-height: 380px;
+  }
+  #history-chart {
+    height: 340px;
+    max-height: 340px;
+  }
   .auth-screen {
     align-items: center;
     background: #f4f6f8;
@@ -225,5 +272,22 @@ export const dashboardCss = `
   }
   .config-form button:hover {
     background: #1e293b;
+  }
+  @media (max-width: 760px) {
+    header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .menu {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .device-grid {
+      grid-template-columns: 1fr;
+    }
+    .history-toolbar {
+      grid-template-columns: 1fr;
+    }
   }
 `;

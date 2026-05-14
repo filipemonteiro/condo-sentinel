@@ -278,6 +278,17 @@ test('dashboard includes session timeout and token form shell', () => {
   assert.match(html, /Authorization: 'Bearer '/);
 });
 
+test('dashboard includes navigable on-demand history controls', () => {
+  const html = renderDashboardHtml({ sessionTimeoutMinutes: 30 });
+
+  assert.match(html, /id="history"/);
+  assert.match(html, /id="history-device"/);
+  assert.match(html, /id="history-range"/);
+  assert.match(html, /id="history-bucket"/);
+  assert.match(html, /data-section="history"/);
+  assert.match(html, /historyCache/);
+});
+
 test('dashboard config form includes client-side range validation messages', () => {
   const html = renderDashboardHtml({ sessionTimeoutMinutes: 30 });
 

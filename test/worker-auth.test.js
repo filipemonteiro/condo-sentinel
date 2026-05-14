@@ -278,6 +278,16 @@ test('dashboard includes session timeout and token form shell', () => {
   assert.match(html, /Authorization: 'Bearer '/);
 });
 
+test('dashboard config form includes client-side range validation messages', () => {
+  const html = renderDashboardHtml({ sessionTimeoutMinutes: 30 });
+
+  assert.match(html, /BATTERY_THRESHOLD_PERCENT: \{ min: 0, max: 100/);
+  assert.match(html, /thresholdPercent: \{ min: 0, max: 100/);
+  assert.match(html, /Configuração não salva:/);
+  assert.match(html, /precisa ser menor ou igual a/);
+  assert.match(html, /Configuração não salva por completo/);
+});
+
 test('dashboard response includes defensive browser headers', async () => {
   const res = await worker.fetch(new Request('https://example.com/dashboard'), env, {});
 

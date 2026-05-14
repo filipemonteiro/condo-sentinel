@@ -372,43 +372,72 @@ export function dashboardJs(options) {
       }
     }
 
-    function configNumberField(name, label, value, min = 0) {
+    const CONFIG_FIELD_RULES = {
+      DASHBOARD_STALE_AFTER_MINUTES: { min: 1, max: 1440, label: 'Dados desatualizados após (min)' },
+      DASHBOARD_SESSION_TIMEOUT_MINUTES: { min: 1, max: 1440, label: 'Sessão expira após (min)' },
+      COOLDOWN_MINUTES: { min: 1, max: 10080, label: 'Cooldown nível baixo (min)' },
+      OFFLINE_COOLDOWN_MINUTES: { min: 1, max: 10080, label: 'Cooldown offline (min)' },
+      SENSOR_COOLDOWN_MINUTES: { min: 1, max: 10080, label: 'Cooldown falha sensor/API (min)' },
+      BATTERY_THRESHOLD_PERCENT: { min: 0, max: 100, label: 'Alerta bateria baixa (%)' },
+      BATTERY_COOLDOWN_MINUTES: { min: 1, max: 10080, label: 'Cooldown bateria baixa (min)' },
+      HISTORY_MAX_POINTS: { min: 1, max: 10080, label: 'Máximo de pontos por device' },
+      HISTORY_MIN_INTERVAL_MINUTES: { min: 1, max: 1440, label: 'Intervalo mínimo entre pontos (min)' },
+      HISTORY_MIN_DELTA_PERCENT: { min: 0, max: 100, label: 'Delta mínimo para salvar nível (%)' },
+    };
+
+    const DEVICE_FIELD_RULES = {
+      thresholdPercent: { min: 0, max: 100, label: 'Alerta nível baixo (%)' },
+      recoveryMarginPercent: { min: 0, max: 100, label: 'Margem recuperação (%)' },
+      minConsecutiveBreaches: { min: 1, max: 100, label: 'Leituras para alerta' },
+      cooldownMinutes: { min: 1, max: 10080, label: 'Cooldown nível baixo (min)' },
+      offlineCooldownMinutes: { min: 1, max: 10080, label: 'Cooldown offline (min)' },
+      faultCooldownMinutes: { min: 1, max: 10080, label: 'Cooldown falha/API (min)' },
+      batteryThresholdPercent: { min: 0, max: 100, label: 'Alerta bateria baixa (%)' },
+      batteryCooldownMinutes: { min: 1, max: 10080, label: 'Cooldown bateria baixa (min)' },
+    };
+
+    function configNumberField(name, value) {
+      const rule = CONFIG_FIELD_RULES[name] || { min: 0, max: null, label: name };
       const safeValue = value === null || value === undefined ? '' : String(value);
+      const maxAttr = rule.max === null || rule.max === undefined ? '' : ' max="' + escHtml(rule.max) + '"';
       return \`
         <div class="field">
-          <label for="config-\${escHtml(name)}">\${escHtml(label)}</label>
-          <input type="number" id="config-\${escHtml(name)}" data-config-field="\${escHtml(name)}" min="\${escHtml(min)}" step="1" value="\${escHtml(safeValue)}">
+          <label for="config-\${escHtml(name)}">\${escHtml(rule.label)}</label>
+          <input type="number" id="config-\${escHtml(name)}" data-config-field="\${escHtml(name)}" min="\${escHtml(rule.min)}"\${maxAttr} step="1" value="\${escHtml(safeValue)}">
         </div>
       \`;
     }
 
-    function deviceNumberField(deviceId, name, label, value, min = 0) {
+    function deviceNumberField(deviceId, deviceName, name, value) {
+      const rule = DEVICE_FIELD_RULES[name] || { min: 0, max: null, label: name };
       const safeValue = value === null || value === undefined ? '' : String(value);
+      const maxAttr = rule.max === null || rule.max === undefined ? '' : ' max="' + escHtml(rule.max) + '"';
       return \`
         <div class="field">
-          <label for="device-\${escHtml(deviceId)}-\${escHtml(name)}">\${escHtml(label)}</label>
-          <input type="number" id="device-\${escHtml(deviceId)}-\${escHtml(name)}" data-device-id="\${escHtml(deviceId)}" data-device-field="\${escHtml(name)}" min="\${escHtml(min)}" step="1" value="\${escHtml(safeValue)}">
+          <label for="device-\${escHtml(deviceId)}-\${escHtml(name)}">\${escHtml(rule.label)}</label>
+          <input type="number" id="device-\${escHtml(deviceId)}-\${escHtml(name)}" data-device-id="\${escHtml(deviceId)}" data-device-name="\${escHtml(deviceName || deviceId)}" data-device-field="\${escHtml(name)}" min="\${escHtml(rule.min)}"\${maxAttr} step="1" value="\${escHtml(safeValue)}">
         </div>
       \`;
     }
 
     function deviceFields(device) {
       const config = device.config || {};
+      const deviceName = device.name || device.id;
       const common = [
-        deviceNumberField(device.id, 'offlineCooldownMinutes', 'Cooldown offline (min)', config.offlineCooldownMinutes, 1),
-        deviceNumberField(device.id, 'faultCooldownMinutes', 'Cooldown falha/API (min)', config.faultCooldownMinutes, 1),
+        deviceNumberField(device.id, deviceName, 'offlineCooldownMinutes', config.offlineCooldownMinutes),
+        deviceNumberField(device.id, deviceName, 'faultCooldownMinutes', config.faultCooldownMinutes),
       ];
       const battery = [
-        deviceNumberField(device.id, 'batteryThresholdPercent', 'Alerta bateria baixa (%)', config.batteryThresholdPercent, 0),
-        deviceNumberField(device.id, 'batteryCooldownMinutes', 'Cooldown bateria baixa (min)', config.batteryCooldownMinutes, 1),
+        deviceNumberField(device.id, deviceName, 'batteryThresholdPercent', config.batteryThresholdPercent),
+        deviceNumberField(device.id, deviceName, 'batteryCooldownMinutes', config.batteryCooldownMinutes),
       ];
 
       if (device.type === 'water_level_sensor') {
         return [
-          deviceNumberField(device.id, 'thresholdPercent', 'Alerta nível baixo (%)', config.thresholdPercent, 0),
-          deviceNumberField(device.id, 'recoveryMarginPercent', 'Margem recuperação (%)', config.recoveryMarginPercent, 0),
-          deviceNumberField(device.id, 'minConsecutiveBreaches', 'Leituras para alerta', config.minConsecutiveBreaches, 1),
-          deviceNumberField(device.id, 'cooldownMinutes', 'Cooldown nível baixo (min)', config.cooldownMinutes, 1),
+          deviceNumberField(device.id, deviceName, 'thresholdPercent', config.thresholdPercent),
+          deviceNumberField(device.id, deviceName, 'recoveryMarginPercent', config.recoveryMarginPercent),
+          deviceNumberField(device.id, deviceName, 'minConsecutiveBreaches', config.minConsecutiveBreaches),
+          deviceNumberField(device.id, deviceName, 'cooldownMinutes', config.cooldownMinutes),
           ...common,
           ...battery,
         ].join('');
@@ -421,12 +450,59 @@ export function dashboardJs(options) {
       return common.join('');
     }
 
-    function readNumberInput(selector) {
+    function readNumberInput(selector, rule, label, errors) {
       const el = document.querySelector(selector);
       if (!el) return null;
       if (String(el.value || '').trim() === '') return null;
+      return readNumberInputFromElement(el, rule, label, errors);
+    }
+
+    function readNumberInputFromElement(el, rule, label, errors) {
       const value = Number(el.value);
-      return Number.isFinite(value) ? value : null;
+      if (!Number.isInteger(value)) {
+        errors.push(label + ' precisa ser um número inteiro.');
+        return null;
+      }
+      if (rule && value < rule.min) {
+        errors.push(label + ' precisa ser maior ou igual a ' + rule.min + '.');
+        return null;
+      }
+      if (rule && rule.max !== null && rule.max !== undefined && value > rule.max) {
+        errors.push(label + ' precisa ser menor ou igual a ' + rule.max + '.');
+        return null;
+      }
+      return value;
+    }
+
+    function readConfigNumber(name, errors) {
+      const rule = CONFIG_FIELD_RULES[name];
+      return readNumberInput('[data-config-field="' + name + '"]', rule, rule.label, errors);
+    }
+
+    function readDeviceNumber(input, errors) {
+      const field = input.getAttribute('data-device-field');
+      const rule = DEVICE_FIELD_RULES[field];
+      const deviceName = input.getAttribute('data-device-name') || input.getAttribute('data-device-id') || 'Device';
+      if (String(input.value || '').trim() === '') return null;
+      return readNumberInputFromElement(input, rule, deviceName + ' - ' + (rule?.label || field), errors);
+    }
+
+    function configsMatch(requested, saved) {
+      const savedConfig = saved || {};
+      for (const [key, value] of Object.entries(requested)) {
+        if (key === 'devices') continue;
+        if (value === null || value === undefined || value === '') continue;
+        if (savedConfig[key] !== value) return false;
+      }
+
+      for (const [deviceId, fields] of Object.entries(requested.devices || {})) {
+        const savedDevice = savedConfig.devices?.[deviceId] || {};
+        for (const [field, value] of Object.entries(fields)) {
+          if (savedDevice[field] !== value) return false;
+        }
+      }
+
+      return true;
     }
 
     function renderConfigForm(config) {
@@ -458,28 +534,28 @@ export function dashboardJs(options) {
             <input type="text" id="config-title" value="\${escHtml(title)}" maxlength="120">
           </div>
           <div class="config-grid">
-            \${configNumberField('DASHBOARD_STALE_AFTER_MINUTES', 'Dados desatualizados após (min)', config.DASHBOARD_STALE_AFTER_MINUTES, 1)}
-            \${configNumberField('DASHBOARD_SESSION_TIMEOUT_MINUTES', 'Sessão expira após (min)', config.DASHBOARD_SESSION_TIMEOUT_MINUTES, 1)}
+            \${configNumberField('DASHBOARD_STALE_AFTER_MINUTES', config.DASHBOARD_STALE_AFTER_MINUTES)}
+            \${configNumberField('DASHBOARD_SESSION_TIMEOUT_MINUTES', config.DASHBOARD_SESSION_TIMEOUT_MINUTES)}
           </div>
         </div>
 
         <div class="config-section">
           <h3>Alertas padrão</h3>
           <div class="config-grid">
-            \${configNumberField('COOLDOWN_MINUTES', 'Cooldown nível baixo (min)', config.COOLDOWN_MINUTES, 1)}
-            \${configNumberField('OFFLINE_COOLDOWN_MINUTES', 'Cooldown offline (min)', config.OFFLINE_COOLDOWN_MINUTES, 1)}
-            \${configNumberField('SENSOR_COOLDOWN_MINUTES', 'Cooldown falha sensor/API (min)', config.SENSOR_COOLDOWN_MINUTES, 1)}
-            \${configNumberField('BATTERY_THRESHOLD_PERCENT', 'Alerta bateria baixa (%)', config.BATTERY_THRESHOLD_PERCENT, 0)}
-            \${configNumberField('BATTERY_COOLDOWN_MINUTES', 'Cooldown bateria baixa (min)', config.BATTERY_COOLDOWN_MINUTES, 1)}
+            \${configNumberField('COOLDOWN_MINUTES', config.COOLDOWN_MINUTES)}
+            \${configNumberField('OFFLINE_COOLDOWN_MINUTES', config.OFFLINE_COOLDOWN_MINUTES)}
+            \${configNumberField('SENSOR_COOLDOWN_MINUTES', config.SENSOR_COOLDOWN_MINUTES)}
+            \${configNumberField('BATTERY_THRESHOLD_PERCENT', config.BATTERY_THRESHOLD_PERCENT)}
+            \${configNumberField('BATTERY_COOLDOWN_MINUTES', config.BATTERY_COOLDOWN_MINUTES)}
           </div>
         </div>
 
         <div class="config-section">
           <h3>Histórico</h3>
           <div class="config-grid">
-            \${configNumberField('HISTORY_MAX_POINTS', 'Máximo de pontos por device', config.HISTORY_MAX_POINTS, 1)}
-            \${configNumberField('HISTORY_MIN_INTERVAL_MINUTES', 'Intervalo mínimo entre pontos (min)', config.HISTORY_MIN_INTERVAL_MINUTES, 1)}
-            \${configNumberField('HISTORY_MIN_DELTA_PERCENT', 'Delta mínimo para salvar nível (%)', config.HISTORY_MIN_DELTA_PERCENT, 0)}
+            \${configNumberField('HISTORY_MAX_POINTS', config.HISTORY_MAX_POINTS)}
+            \${configNumberField('HISTORY_MIN_INTERVAL_MINUTES', config.HISTORY_MIN_INTERVAL_MINUTES)}
+            \${configNumberField('HISTORY_MIN_DELTA_PERCENT', config.HISTORY_MIN_DELTA_PERCENT)}
           </div>
         </div>
 
@@ -503,18 +579,19 @@ export function dashboardJs(options) {
 
     async function saveConfigForm() {
       try {
+        const errors = [];
         const nextConfig = {
           DASHBOARD_TITLE: document.getElementById('config-title').value.trim(),
-          DASHBOARD_STALE_AFTER_MINUTES: readNumberInput('[data-config-field="DASHBOARD_STALE_AFTER_MINUTES"]'),
-          DASHBOARD_SESSION_TIMEOUT_MINUTES: readNumberInput('[data-config-field="DASHBOARD_SESSION_TIMEOUT_MINUTES"]'),
-          COOLDOWN_MINUTES: readNumberInput('[data-config-field="COOLDOWN_MINUTES"]'),
-          OFFLINE_COOLDOWN_MINUTES: readNumberInput('[data-config-field="OFFLINE_COOLDOWN_MINUTES"]'),
-          SENSOR_COOLDOWN_MINUTES: readNumberInput('[data-config-field="SENSOR_COOLDOWN_MINUTES"]'),
-          BATTERY_THRESHOLD_PERCENT: readNumberInput('[data-config-field="BATTERY_THRESHOLD_PERCENT"]'),
-          BATTERY_COOLDOWN_MINUTES: readNumberInput('[data-config-field="BATTERY_COOLDOWN_MINUTES"]'),
-          HISTORY_MAX_POINTS: readNumberInput('[data-config-field="HISTORY_MAX_POINTS"]'),
-          HISTORY_MIN_INTERVAL_MINUTES: readNumberInput('[data-config-field="HISTORY_MIN_INTERVAL_MINUTES"]'),
-          HISTORY_MIN_DELTA_PERCENT: readNumberInput('[data-config-field="HISTORY_MIN_DELTA_PERCENT"]'),
+          DASHBOARD_STALE_AFTER_MINUTES: readConfigNumber('DASHBOARD_STALE_AFTER_MINUTES', errors),
+          DASHBOARD_SESSION_TIMEOUT_MINUTES: readConfigNumber('DASHBOARD_SESSION_TIMEOUT_MINUTES', errors),
+          COOLDOWN_MINUTES: readConfigNumber('COOLDOWN_MINUTES', errors),
+          OFFLINE_COOLDOWN_MINUTES: readConfigNumber('OFFLINE_COOLDOWN_MINUTES', errors),
+          SENSOR_COOLDOWN_MINUTES: readConfigNumber('SENSOR_COOLDOWN_MINUTES', errors),
+          BATTERY_THRESHOLD_PERCENT: readConfigNumber('BATTERY_THRESHOLD_PERCENT', errors),
+          BATTERY_COOLDOWN_MINUTES: readConfigNumber('BATTERY_COOLDOWN_MINUTES', errors),
+          HISTORY_MAX_POINTS: readConfigNumber('HISTORY_MAX_POINTS', errors),
+          HISTORY_MIN_INTERVAL_MINUTES: readConfigNumber('HISTORY_MIN_INTERVAL_MINUTES', errors),
+          HISTORY_MIN_DELTA_PERCENT: readConfigNumber('HISTORY_MIN_DELTA_PERCENT', errors),
           devices: {},
         };
 
@@ -522,16 +599,28 @@ export function dashboardJs(options) {
           const deviceId = input.getAttribute('data-device-id');
           const field = input.getAttribute('data-device-field');
           if (String(input.value || '').trim() === '') return;
-          const value = Number(input.value);
-          if (!deviceId || !field || !Number.isFinite(value)) return;
+          const value = readDeviceNumber(input, errors);
+          if (!deviceId || !field || value === null) return;
           nextConfig.devices[deviceId] = {
             ...(nextConfig.devices[deviceId] || {}),
             [field]: value,
           };
         });
 
+        if (errors.length > 0) {
+          alert('Configuração não salva:\\n\\n' + errors.slice(0, 8).join('\\n'));
+          return;
+        }
+
         const result = await saveConfig({ config: nextConfig });
         if (result.success) {
+          if (!configsMatch(nextConfig, result.config || {})) {
+            alert('Configuração não salva por completo. Verifique os campos informados e tente novamente.');
+            currentDashboardContext = await loadConfig();
+            renderConfigForm(currentDashboardContext.config || {});
+            return;
+          }
+
           currentDashboardContext = {
             ...(currentDashboardContext || {}),
             config: result.config || {},

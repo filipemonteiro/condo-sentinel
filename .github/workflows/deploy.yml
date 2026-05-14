@@ -37,13 +37,13 @@ jobs:
 
       - name: Guard runtime secrets
         run: |
-          if grep -Eq '^\[vars\]|DASHBOARD_ACCESS_TOKEN|CLIENT_SECRET|TUYA_CLIENT_SECRET|TELEGRAM_BOT_TOKEN' wrangler.toml; then
+          if grep -Eq '^\[.*vars\]|CLIENT_ID|CLIENT_SECRET|TUYA_BASE|TUYA_ACCESS_TOKEN|TUYA_CLIENT_ID|TUYA_CLIENT_SECRET|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID|DASHBOARD_ACCESS_TOKEN|DASHBOARD_USERS_JSON|DEVICE_REGISTRY_JSON|AUTOMATIONS_JSON|APP_NAME|DASHBOARD_TITLE|DASHBOARD_SESSION_TIMEOUT_MINUTES|DASHBOARD_STALE_AFTER_MINUTES|DRY_RUN|LOG_FULL_PAYLOAD|COOLDOWN_MINUTES|OFFLINE_COOLDOWN_MINUTES|SENSOR_COOLDOWN_MINUTES|BATTERY_THRESHOLD_PERCENT|BATTERY_COOLDOWN_MINUTES|HISTORY_MAX_POINTS|HISTORY_MIN_INTERVAL_MINUTES|HISTORY_MIN_DELTA_PERCENT' wrangler.toml; then
             echo "wrangler.toml must not define runtime variables or secrets. Configure them in Cloudflare Workers settings/secrets instead."
             exit 1
           fi
 
       - name: Deploy
-        run: npx wrangler deploy
+        run: npx wrangler deploy --keep-vars
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

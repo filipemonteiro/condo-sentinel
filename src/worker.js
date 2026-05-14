@@ -14,11 +14,11 @@
  * - dashboard.js: Dashboard e APIs
  */
 
-import { parseJsonEnv, toInt, htmlResponse, jsonResponse } from './utils.js';
-import { getConfig } from './config.js';
+import { parseJsonEnv, htmlResponse, jsonResponse } from './utils.js';
+import { EDITABLE_DEVICE_CONFIG_FIELDS, getConfig, normalizeDashboardRuntimeConfig } from './config.js';
 import { loadAllDeviceStates, saveAllDeviceStates, loadGlobalState, saveGlobalState, loadDashboardRuntimeConfig, saveDashboardRuntimeConfig, loadDashboardUserMappings, saveDashboardUserMappings } from './state.js';
 import { getTuyaToken } from './tuya.js';
-import { processDevices } from './devices.js';
+import { applyRuntimeDeviceConfig, processDevices } from './devices.js';
 import { evaluateAutomations } from './automations.js';
 import { buildDashboardStatus, renderDashboardHtml, handleApiHistory } from './dashboard.js';
 import { sendTelegramMessage } from './notifications.js';
@@ -69,7 +69,7 @@ export default {
       const cfg = await getConfig(env);
       const currentUser = await getDashboardUser(request, env);
       return htmlResponse(renderDashboardHtml({
-        sessionTimeoutMinutes: toInt(env.DASHBOARD_SESSION_TIMEOUT_MINUTES, 30),
+        sessionTimeoutMinutes: cfg.dashboardSessionTimeoutMinutes,
         dashboardTitle: cfg.dashboardTitle,
         userRole: currentUser.role,
       }));
@@ -93,9 +93,12 @@ export default {
         return jsonResponse({
           currentUser,
           config: {
-            DASHBOARD_TITLE: cfg.dashboardTitle,
+            ...buildEditableConfigPayload(cfg),
             ...(runtimeConfig || {}),
           },
+          devices: currentUser.role === 'admin'
+            ? buildEditableDeviceConfigPayload(parseJsonEnv(env.DEVICE_REGISTRY_JSON, []), cfg)
+            : [],
           users: currentUser.role === 'admin' ? users : [],
         });
       }
@@ -110,7 +113,9 @@ export default {
           return jsonResponse({ error: 'Invalid payload' }, 400);
         }
 
-        const runtimeConfig = body.config && typeof body.config === 'object' ? body.config : {};
+        const runtimeConfig = normalizeDashboardRuntimeConfig(
+          body.config && typeof body.config === 'object' ? body.config : {}
+        );
         let normalizedUsers = null;
 
         if (Array.isArray(body.users)) {
@@ -140,6 +145,88 @@ export default {
     return new Response("Not found", { status: 404 });
   }
 };
+
+function buildEditableConfigPayload(cfg) {
+  return {
+    DASHBOARD_TITLE: cfg.dashboardTitle,
+    DASHBOARD_STALE_AFTER_MINUTES: cfg.dashboardStaleAfterMinutes,
+    DASHBOARD_SESSION_TIMEOUT_MINUTES: cfg.dashboardSessionTimeoutMinutes,
+    COOLDOWN_MINUTES: Math.round(cfg.defaultCooldownMs / 60_000),
+    OFFLINE_COOLDOWN_MINUTES: Math.round(cfg.defaultOfflineCooldownMs / 60_000),
+    SENSOR_COOLDOWN_MINUTES: Math.round(cfg.defaultFaultCooldownMs / 60_000),
+    BATTERY_THRESHOLD_PERCENT: cfg.batteryThresholdPercent,
+    BATTERY_COOLDOWN_MINUTES: Math.round(cfg.batteryCooldownMs / 60_000),
+    HISTORY_MAX_POINTS: cfg.historyMaxPoints,
+    HISTORY_MIN_INTERVAL_MINUTES: cfg.historyMinIntervalMinutes,
+    HISTORY_MIN_DELTA_PERCENT: cfg.historyMinDeltaPercent,
+    devices: cfg.deviceConfigs || {},
+  };
+}
+
+function buildEditableDeviceConfigPayload(devices, cfg) {
+  if (!Array.isArray(devices)) return [];
+
+  return devices
+    .filter(device => device && device.id && device.type)
+    .map(device => {
+      const configured = applyRuntimeDeviceConfig(device, cfg);
+      const editableConfig = buildEffectiveDeviceConfig(configured, cfg);
+
+      return {
+        id: device.id,
+        name: device.name || device.id,
+        role: device.role || null,
+        type: device.type,
+        config: editableConfig,
+      };
+    });
+}
+
+function buildEffectiveDeviceConfig(device, cfg) {
+  const defaults = buildDeviceConfigDefaults(device, cfg);
+  const editableConfig = {};
+
+  for (const field of Object.keys(defaults)) {
+    editableConfig[field] = device[field] ?? defaults[field];
+  }
+
+  return editableConfig;
+}
+
+function buildDeviceConfigDefaults(device, cfg) {
+  const common = {
+    offlineCooldownMinutes: Math.round(cfg.defaultOfflineCooldownMs / 60_000),
+    faultCooldownMinutes: Math.round(cfg.defaultFaultCooldownMs / 60_000),
+  };
+  const battery = {
+    batteryThresholdPercent: cfg.batteryThresholdPercent,
+    batteryCooldownMinutes: Math.round(cfg.batteryCooldownMs / 60_000),
+  };
+
+  if (device.type === 'water_level_sensor') {
+    return {
+      thresholdPercent: 20,
+      recoveryMarginPercent: 10,
+      minConsecutiveBreaches: 2,
+      cooldownMinutes: Math.round(cfg.defaultCooldownMs / 60_000),
+      ...common,
+      ...battery,
+    };
+  }
+
+  if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
+    return {
+      ...common,
+      ...battery,
+    };
+  }
+
+  if (device.type === 'valve') {
+    return common;
+  }
+
+  return common;
+}
 
 function requireDashboardAuth(request, env) {
   const expectedToken = String(env.DASHBOARD_ACCESS_TOKEN || "").trim();

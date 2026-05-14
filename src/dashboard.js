@@ -4,8 +4,10 @@
  */
 
 import { toInt, parseJsonEnv, jsonResponse, htmlResponse } from './utils.js';
+import { getConfig } from './config.js';
 import { loadAllDeviceStates, createDefaultDeviceState } from './state.js';
 import { getDeviceHistory } from './history.js';
+import { applyRuntimeDeviceConfig } from './devices.js';
 import { renderDashboardHtml } from './dashboard-template.js';
 
 /**
@@ -14,14 +16,16 @@ import { renderDashboardHtml } from './dashboard-template.js';
 export async function buildDashboardStatus(env) {
   const devices = parseJsonEnv(env.DEVICE_REGISTRY_JSON, []);
   const automations = parseJsonEnv(env.AUTOMATIONS_JSON, []);
+  const cfg = await getConfig(env);
   const now = Date.now();
-  const staleAfterMinutes = toInt(env.DASHBOARD_STALE_AFTER_MINUTES, 30);
+  const staleAfterMinutes = cfg.dashboardStaleAfterMinutes ?? toInt(env.DASHBOARD_STALE_AFTER_MINUTES, 30);
   const staleAfterMs = staleAfterMinutes * 60 * 1000;
 
   // Carrega estados isolados por device
   const deviceStates = await loadAllDeviceStates(env, devices);
 
-  const deviceViews = (Array.isArray(devices) ? devices : []).map(device => {
+  const deviceViews = (Array.isArray(devices) ? devices : []).map(rawDevice => {
+    const device = applyRuntimeDeviceConfig(rawDevice, cfg);
     const dState = deviceStates[device.id] || createDefaultDeviceState(device);
     const readingUpdatedAt = dState.lastReading?.readingUpdatedAt || null;
     const isStale =

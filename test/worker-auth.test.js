@@ -120,6 +120,104 @@ test('dashboard context returns admin role from Cloudflare Access email', async 
   assert.equal(payload.users.length, 1);
 });
 
+test('dashboard context exposes editable non-sensitive config for admin', async () => {
+  const state = makeState({
+    'dashboard:runtime:config': JSON.stringify({
+      COOLDOWN_MINUTES: 15,
+      devices: {
+        'water-test': {
+          thresholdPercent: 35,
+        },
+      },
+    }),
+  });
+
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
+      },
+    }),
+    {
+      ...env,
+      ...state,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+      DEVICE_REGISTRY_JSON: JSON.stringify([
+        {
+          id: 'water-test',
+          name: 'Water test',
+          role: 'tank_test',
+          type: 'water_level_sensor',
+          thresholdPercent: 20,
+        },
+      ]),
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(payload.config.COOLDOWN_MINUTES, 15);
+  assert.equal(payload.devices[0].config.thresholdPercent, 35);
+  assert.equal(payload.devices[0].config.cooldownMinutes, 15);
+  assert.equal(payload.config.DASHBOARD_ACCESS_TOKEN, undefined);
+});
+
+test('dashboard context exposes device fields according to device type', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
+      },
+    }),
+    {
+      ...env,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+      DEVICE_REGISTRY_JSON: JSON.stringify([
+        { id: 'water-test', role: 'tank_test', type: 'water_level_sensor' },
+        { id: 'gas-test', role: 'gas_test', type: 'gas_sensor' },
+        { id: 'valve-test', role: 'valve_test', type: 'valve' },
+      ]),
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  const byId = Object.fromEntries(payload.devices.map(device => [device.id, device]));
+
+  assert.equal(byId['water-test'].config.thresholdPercent, 20);
+  assert.equal(byId['water-test'].config.batteryThresholdPercent, 20);
+  assert.equal(byId['gas-test'].config.thresholdPercent, undefined);
+  assert.equal(byId['gas-test'].config.batteryThresholdPercent, 20);
+  assert.equal(byId['valve-test'].config.thresholdPercent, undefined);
+  assert.equal(byId['valve-test'].config.batteryThresholdPercent, undefined);
+  assert.equal(byId['valve-test'].config.offlineCooldownMinutes, 180);
+});
+
+test('viewer dashboard context does not expose user list or device config', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+      },
+    }),
+    {
+      ...env,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+      DEVICE_REGISTRY_JSON: '[{"id":"water-test","type":"water_level_sensor"}]',
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.deepEqual(payload.users, []);
+  assert.deepEqual(payload.devices, []);
+});
+
 test('saving dashboard config does not clear saved users when users are omitted', async () => {
   const state = makeState({
     'dashboard:runtime:user-roles': JSON.stringify([

@@ -372,13 +372,125 @@ export function dashboardJs(options) {
       }
     }
 
+    function configNumberField(name, label, value, min = 0) {
+      const safeValue = value === null || value === undefined ? '' : String(value);
+      return \`
+        <div class="field">
+          <label for="config-\${escHtml(name)}">\${escHtml(label)}</label>
+          <input type="number" id="config-\${escHtml(name)}" data-config-field="\${escHtml(name)}" min="\${escHtml(min)}" step="1" value="\${escHtml(safeValue)}">
+        </div>
+      \`;
+    }
+
+    function deviceNumberField(deviceId, name, label, value, min = 0) {
+      const safeValue = value === null || value === undefined ? '' : String(value);
+      return \`
+        <div class="field">
+          <label for="device-\${escHtml(deviceId)}-\${escHtml(name)}">\${escHtml(label)}</label>
+          <input type="number" id="device-\${escHtml(deviceId)}-\${escHtml(name)}" data-device-id="\${escHtml(deviceId)}" data-device-field="\${escHtml(name)}" min="\${escHtml(min)}" step="1" value="\${escHtml(safeValue)}">
+        </div>
+      \`;
+    }
+
+    function deviceFields(device) {
+      const config = device.config || {};
+      const common = [
+        deviceNumberField(device.id, 'offlineCooldownMinutes', 'Cooldown offline (min)', config.offlineCooldownMinutes, 1),
+        deviceNumberField(device.id, 'faultCooldownMinutes', 'Cooldown falha/API (min)', config.faultCooldownMinutes, 1),
+      ];
+      const battery = [
+        deviceNumberField(device.id, 'batteryThresholdPercent', 'Alerta bateria baixa (%)', config.batteryThresholdPercent, 0),
+        deviceNumberField(device.id, 'batteryCooldownMinutes', 'Cooldown bateria baixa (min)', config.batteryCooldownMinutes, 1),
+      ];
+
+      if (device.type === 'water_level_sensor') {
+        return [
+          deviceNumberField(device.id, 'thresholdPercent', 'Alerta nível baixo (%)', config.thresholdPercent, 0),
+          deviceNumberField(device.id, 'recoveryMarginPercent', 'Margem recuperação (%)', config.recoveryMarginPercent, 0),
+          deviceNumberField(device.id, 'minConsecutiveBreaches', 'Leituras para alerta', config.minConsecutiveBreaches, 1),
+          deviceNumberField(device.id, 'cooldownMinutes', 'Cooldown nível baixo (min)', config.cooldownMinutes, 1),
+          ...common,
+          ...battery,
+        ].join('');
+      }
+
+      if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
+        return [...common, ...battery].join('');
+      }
+
+      return common.join('');
+    }
+
+    function readNumberInput(selector) {
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      if (String(el.value || '').trim() === '') return null;
+      const value = Number(el.value);
+      return Number.isFinite(value) ? value : null;
+    }
+
     function renderConfigForm(config) {
       const form = document.getElementById('config-form');
       const title = config.DASHBOARD_TITLE || config.dashboardTitle || '';
+      const devices = Array.isArray(currentDashboardContext?.devices) ? currentDashboardContext.devices : [];
+      const deviceSections = devices.map(device => {
+        return \`
+          <div class="config-device">
+            <div class="config-device-header">
+              <div>
+                <h3>\${escHtml(device.name)}</h3>
+                <div class="muted">\${escHtml(device.role || '-')} • \${escHtml(device.type)}</div>
+              </div>
+            </div>
+            <div class="config-grid">
+              \${deviceFields(device)}
+            </div>
+          </div>
+        \`;
+      }).join('');
+
       form.innerHTML = \`
-        <label>Título do Dashboard:</label>
-        <input type="text" id="config-title" value="\${escHtml(title)}">
-        <button type="button" onclick="saveConfigForm()">Salvar</button>
+        <h2>Configurações</h2>
+        <div class="config-section">
+          <h3>Dashboard</h3>
+          <div class="field field-wide">
+            <label for="config-title">Título do dashboard</label>
+            <input type="text" id="config-title" value="\${escHtml(title)}" maxlength="120">
+          </div>
+          <div class="config-grid">
+            \${configNumberField('DASHBOARD_STALE_AFTER_MINUTES', 'Dados desatualizados após (min)', config.DASHBOARD_STALE_AFTER_MINUTES, 1)}
+            \${configNumberField('DASHBOARD_SESSION_TIMEOUT_MINUTES', 'Sessão expira após (min)', config.DASHBOARD_SESSION_TIMEOUT_MINUTES, 1)}
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>Alertas padrão</h3>
+          <div class="config-grid">
+            \${configNumberField('COOLDOWN_MINUTES', 'Cooldown nível baixo (min)', config.COOLDOWN_MINUTES, 1)}
+            \${configNumberField('OFFLINE_COOLDOWN_MINUTES', 'Cooldown offline (min)', config.OFFLINE_COOLDOWN_MINUTES, 1)}
+            \${configNumberField('SENSOR_COOLDOWN_MINUTES', 'Cooldown falha sensor/API (min)', config.SENSOR_COOLDOWN_MINUTES, 1)}
+            \${configNumberField('BATTERY_THRESHOLD_PERCENT', 'Alerta bateria baixa (%)', config.BATTERY_THRESHOLD_PERCENT, 0)}
+            \${configNumberField('BATTERY_COOLDOWN_MINUTES', 'Cooldown bateria baixa (min)', config.BATTERY_COOLDOWN_MINUTES, 1)}
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>Histórico</h3>
+          <div class="config-grid">
+            \${configNumberField('HISTORY_MAX_POINTS', 'Máximo de pontos por device', config.HISTORY_MAX_POINTS, 1)}
+            \${configNumberField('HISTORY_MIN_INTERVAL_MINUTES', 'Intervalo mínimo entre pontos (min)', config.HISTORY_MIN_INTERVAL_MINUTES, 1)}
+            \${configNumberField('HISTORY_MIN_DELTA_PERCENT', 'Delta mínimo para salvar nível (%)', config.HISTORY_MIN_DELTA_PERCENT, 0)}
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>Dispositivos</h3>
+          \${deviceSections || '<div class="muted">Nenhum device configurável encontrado.</div>'}
+        </div>
+
+        <div class="config-actions">
+          <button type="button" onclick="saveConfigForm()">Salvar</button>
+        </div>
       \`;
       document.getElementById('config-title').value = title;
     }
@@ -391,8 +503,34 @@ export function dashboardJs(options) {
 
     async function saveConfigForm() {
       try {
-        const title = document.getElementById('config-title').value.trim();
-        const result = await saveConfig({ config: { DASHBOARD_TITLE: title } });
+        const nextConfig = {
+          DASHBOARD_TITLE: document.getElementById('config-title').value.trim(),
+          DASHBOARD_STALE_AFTER_MINUTES: readNumberInput('[data-config-field="DASHBOARD_STALE_AFTER_MINUTES"]'),
+          DASHBOARD_SESSION_TIMEOUT_MINUTES: readNumberInput('[data-config-field="DASHBOARD_SESSION_TIMEOUT_MINUTES"]'),
+          COOLDOWN_MINUTES: readNumberInput('[data-config-field="COOLDOWN_MINUTES"]'),
+          OFFLINE_COOLDOWN_MINUTES: readNumberInput('[data-config-field="OFFLINE_COOLDOWN_MINUTES"]'),
+          SENSOR_COOLDOWN_MINUTES: readNumberInput('[data-config-field="SENSOR_COOLDOWN_MINUTES"]'),
+          BATTERY_THRESHOLD_PERCENT: readNumberInput('[data-config-field="BATTERY_THRESHOLD_PERCENT"]'),
+          BATTERY_COOLDOWN_MINUTES: readNumberInput('[data-config-field="BATTERY_COOLDOWN_MINUTES"]'),
+          HISTORY_MAX_POINTS: readNumberInput('[data-config-field="HISTORY_MAX_POINTS"]'),
+          HISTORY_MIN_INTERVAL_MINUTES: readNumberInput('[data-config-field="HISTORY_MIN_INTERVAL_MINUTES"]'),
+          HISTORY_MIN_DELTA_PERCENT: readNumberInput('[data-config-field="HISTORY_MIN_DELTA_PERCENT"]'),
+          devices: {},
+        };
+
+        document.querySelectorAll('[data-device-id][data-device-field]').forEach(input => {
+          const deviceId = input.getAttribute('data-device-id');
+          const field = input.getAttribute('data-device-field');
+          if (String(input.value || '').trim() === '') return;
+          const value = Number(input.value);
+          if (!deviceId || !field || !Number.isFinite(value)) return;
+          nextConfig.devices[deviceId] = {
+            ...(nextConfig.devices[deviceId] || {}),
+            [field]: value,
+          };
+        });
+
+        const result = await saveConfig({ config: nextConfig });
         if (result.success) {
           currentDashboardContext = {
             ...(currentDashboardContext || {}),

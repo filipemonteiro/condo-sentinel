@@ -4,7 +4,7 @@
  * Todas as variáveis necessárias para o sistema
  */
 
-import { toInt, toBool, parseJsonEnv } from './utils.js';
+import { toInt, toBool } from './utils.js';
 import { loadDashboardRuntimeConfig } from './state.js';
 
 const DEFAULT_CONFIG = {
@@ -24,39 +24,103 @@ const DEFAULT_CONFIG = {
   
   // Dashboard
   DASHBOARD_STALE_AFTER_MINUTES: 30,
+  DASHBOARD_SESSION_TIMEOUT_MINUTES: 30,
   DASHBOARD_TITLE: 'Condo Sentinel',
   BATTERY_THRESHOLD_PERCENT: 20,
   BATTERY_COOLDOWN_MINUTES: 180,
 };
 
+export const EDITABLE_RUNTIME_CONFIG_FIELDS = [
+  'DASHBOARD_TITLE',
+  'DASHBOARD_STALE_AFTER_MINUTES',
+  'DASHBOARD_SESSION_TIMEOUT_MINUTES',
+  'COOLDOWN_MINUTES',
+  'OFFLINE_COOLDOWN_MINUTES',
+  'SENSOR_COOLDOWN_MINUTES',
+  'BATTERY_THRESHOLD_PERCENT',
+  'BATTERY_COOLDOWN_MINUTES',
+  'HISTORY_MAX_POINTS',
+  'HISTORY_MIN_INTERVAL_MINUTES',
+  'HISTORY_MIN_DELTA_PERCENT',
+];
+
+export const EDITABLE_DEVICE_CONFIG_FIELDS = [
+  'thresholdPercent',
+  'recoveryMarginPercent',
+  'minConsecutiveBreaches',
+  'cooldownMinutes',
+  'offlineCooldownMinutes',
+  'faultCooldownMinutes',
+  'batteryThresholdPercent',
+  'batteryCooldownMinutes',
+];
+
 /**
  * Retorna a configuração processada a partir das variáveis de ambiente
  */
 async function getConfig(env) {
-  const runtimeConfig = await loadDashboardRuntimeConfig(env);
-  const mergedConfig = {
-    ...DEFAULT_CONFIG,
-    ...(runtimeConfig || {}),
-    DASHBOARD_STALE_AFTER_MINUTES: env.DASHBOARD_STALE_AFTER_MINUTES ?? (runtimeConfig?.DASHBOARD_STALE_AFTER_MINUTES ?? DEFAULT_CONFIG.DASHBOARD_STALE_AFTER_MINUTES),
-    DASHBOARD_TITLE: env.DASHBOARD_TITLE ?? (runtimeConfig?.DASHBOARD_TITLE ?? DEFAULT_CONFIG.DASHBOARD_TITLE),
-    BATTERY_THRESHOLD_PERCENT: env.BATTERY_THRESHOLD_PERCENT ?? (runtimeConfig?.BATTERY_THRESHOLD_PERCENT ?? DEFAULT_CONFIG.BATTERY_THRESHOLD_PERCENT),
-    BATTERY_COOLDOWN_MINUTES: env.BATTERY_COOLDOWN_MINUTES ?? (runtimeConfig?.BATTERY_COOLDOWN_MINUTES ?? DEFAULT_CONFIG.BATTERY_COOLDOWN_MINUTES),
-  };
+  const runtimeConfig = normalizeDashboardRuntimeConfig(await loadDashboardRuntimeConfig(env));
+  const valueFor = (name) => runtimeConfig[name] ?? env[name] ?? DEFAULT_CONFIG[name];
 
   return {
-    dryRun: toBool(env.DRY_RUN, mergedConfig.DRY_RUN),
-    logFullPayload: toBool(env.LOG_FULL_PAYLOAD, mergedConfig.LOG_FULL_PAYLOAD),
-    defaultCooldownMs: toInt(env.COOLDOWN_MINUTES, mergedConfig.COOLDOWN_MINUTES) * 60 * 1000,
-    defaultOfflineCooldownMs: toInt(env.OFFLINE_COOLDOWN_MINUTES, mergedConfig.OFFLINE_COOLDOWN_MINUTES) * 60 * 1000,
-    defaultFaultCooldownMs: toInt(env.SENSOR_COOLDOWN_MINUTES, mergedConfig.SENSOR_COOLDOWN_MINUTES) * 60 * 1000,
-    batteryThresholdPercent: toInt(env.BATTERY_THRESHOLD_PERCENT, mergedConfig.BATTERY_THRESHOLD_PERCENT),
-    batteryCooldownMs: toInt(env.BATTERY_COOLDOWN_MINUTES, mergedConfig.BATTERY_COOLDOWN_MINUTES) * 60 * 1000,
-    historyMinIntervalMinutes: toInt(env.HISTORY_MIN_INTERVAL_MINUTES, mergedConfig.HISTORY_MIN_INTERVAL_MINUTES),
-    historyMinDeltaPercent: toInt(env.HISTORY_MIN_DELTA_PERCENT, mergedConfig.HISTORY_MIN_DELTA_PERCENT),
-    historyMaxPoints: toInt(env.HISTORY_MAX_POINTS, mergedConfig.HISTORY_MAX_POINTS),
-    dashboardStaleAfterMinutes: toInt(env.DASHBOARD_STALE_AFTER_MINUTES, mergedConfig.DASHBOARD_STALE_AFTER_MINUTES),
-    dashboardTitle: env.DASHBOARD_TITLE || mergedConfig.DASHBOARD_TITLE,
+    dryRun: toBool(env.DRY_RUN, DEFAULT_CONFIG.DRY_RUN),
+    logFullPayload: toBool(env.LOG_FULL_PAYLOAD, DEFAULT_CONFIG.LOG_FULL_PAYLOAD),
+    defaultCooldownMs: toInt(valueFor('COOLDOWN_MINUTES'), DEFAULT_CONFIG.COOLDOWN_MINUTES) * 60 * 1000,
+    defaultOfflineCooldownMs: toInt(valueFor('OFFLINE_COOLDOWN_MINUTES'), DEFAULT_CONFIG.OFFLINE_COOLDOWN_MINUTES) * 60 * 1000,
+    defaultFaultCooldownMs: toInt(valueFor('SENSOR_COOLDOWN_MINUTES'), DEFAULT_CONFIG.SENSOR_COOLDOWN_MINUTES) * 60 * 1000,
+    batteryThresholdPercent: toInt(valueFor('BATTERY_THRESHOLD_PERCENT'), DEFAULT_CONFIG.BATTERY_THRESHOLD_PERCENT),
+    batteryCooldownMs: toInt(valueFor('BATTERY_COOLDOWN_MINUTES'), DEFAULT_CONFIG.BATTERY_COOLDOWN_MINUTES) * 60 * 1000,
+    historyMinIntervalMinutes: toInt(valueFor('HISTORY_MIN_INTERVAL_MINUTES'), DEFAULT_CONFIG.HISTORY_MIN_INTERVAL_MINUTES),
+    historyMinDeltaPercent: toInt(valueFor('HISTORY_MIN_DELTA_PERCENT'), DEFAULT_CONFIG.HISTORY_MIN_DELTA_PERCENT),
+    historyMaxPoints: toInt(valueFor('HISTORY_MAX_POINTS'), DEFAULT_CONFIG.HISTORY_MAX_POINTS),
+    dashboardStaleAfterMinutes: toInt(valueFor('DASHBOARD_STALE_AFTER_MINUTES'), DEFAULT_CONFIG.DASHBOARD_STALE_AFTER_MINUTES),
+    dashboardSessionTimeoutMinutes: toInt(valueFor('DASHBOARD_SESSION_TIMEOUT_MINUTES'), DEFAULT_CONFIG.DASHBOARD_SESSION_TIMEOUT_MINUTES),
+    dashboardTitle: String(valueFor('DASHBOARD_TITLE') || DEFAULT_CONFIG.DASHBOARD_TITLE),
+    runtimeConfig,
+    deviceConfigs: runtimeConfig.devices || {},
   };
+}
+
+export function normalizeDashboardRuntimeConfig(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+
+  const source = {
+    ...input,
+    DASHBOARD_TITLE: input.DASHBOARD_TITLE ?? input.dashboardTitle,
+  };
+  const normalized = {};
+
+  for (const field of EDITABLE_RUNTIME_CONFIG_FIELDS) {
+    if (source[field] === undefined || source[field] === null || source[field] === '') continue;
+    if (field === 'DASHBOARD_TITLE') {
+      normalized[field] = String(source[field]).slice(0, 120);
+    } else {
+      const value = toInt(source[field], null);
+      if (Number.isFinite(value)) normalized[field] = value;
+    }
+  }
+
+  if (input.devices && typeof input.devices === 'object' && !Array.isArray(input.devices)) {
+    const devices = {};
+    for (const [deviceKey, config] of Object.entries(input.devices)) {
+      if (!deviceKey || !config || typeof config !== 'object' || Array.isArray(config)) continue;
+
+      const safeConfig = {};
+      for (const field of EDITABLE_DEVICE_CONFIG_FIELDS) {
+        if (config[field] === undefined || config[field] === null || config[field] === '') continue;
+        const value = toInt(config[field], null);
+        if (Number.isFinite(value)) safeConfig[field] = value;
+      }
+
+      if (Object.keys(safeConfig).length > 0) {
+        devices[String(deviceKey)] = safeConfig;
+      }
+    }
+
+    if (Object.keys(devices).length > 0) normalized.devices = devices;
+  }
+
+  return normalized;
 }
 
 /**
@@ -102,6 +166,7 @@ function getOptionalEnvVars() {
     
     // Dashboard
     { name: 'DASHBOARD_STALE_AFTER_MINUTES', default: '30', description: 'Minutos para considerar dado stale' },
+    { name: 'DASHBOARD_SESSION_TIMEOUT_MINUTES', default: '30', description: 'Timeout de sessão do dashboard' },
     { name: 'DASHBOARD_TITLE', default: 'Condo Sentinel', description: 'Título customizado do dashboard' },
     { name: 'BATTERY_THRESHOLD_PERCENT', default: '20', description: 'Percetual de bateria considerado baixo' },
     { name: 'BATTERY_COOLDOWN_MINUTES', default: '180', description: 'Cooldown para alertas de bateria baixa' },

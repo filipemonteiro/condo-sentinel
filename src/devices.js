@@ -18,42 +18,44 @@ export async function processDevices(env, accessToken, enabledDevices, deviceSta
   context.batchInfoById = batchMap;
 
   for (const device of enabledDevices) {
-    context.devicesById[device.id] = device;
-    if (device.role) {
-      context.devicesByRole[device.role] = device;
+    const configuredDevice = applyRuntimeDeviceConfig(device, cfg);
+
+    context.devicesById[configuredDevice.id] = configuredDevice;
+    if (configuredDevice.role) {
+      context.devicesByRole[configuredDevice.role] = configuredDevice;
     }
 
     // Garante que o estado existe com defaults
-    deviceStates[device.id] = { ...deviceStates[device.id] };
+    deviceStates[configuredDevice.id] = { ...deviceStates[configuredDevice.id] };
 
     try {
       const result = await inspectDevice(
         env,
         accessToken,
-        device,
-        batchMap[device.id],
-        deviceStates[device.id],
+        configuredDevice,
+        batchMap[configuredDevice.id],
+        deviceStates[configuredDevice.id],
         cfg,
         now,
         notifications
       );
 
-      context.availabilityByRole[device.role || device.id] = {
+      context.availabilityByRole[configuredDevice.role || configuredDevice.id] = {
         online: result.online,
         batchIsOnline: result.batchIsOnline,
       };
 
       if (result.reading) {
-        context.readingsByRole[device.role || device.id] = result.reading;
+        context.readingsByRole[configuredDevice.role || configuredDevice.id] = result.reading;
       }
 
-      await appendDeviceHistory(env, device, result.reading, result.online, now);
+      await appendDeviceHistory(env, configuredDevice, result.reading, result.online, now, cfg);
     } catch (err) {
-      console.error(`Erro processando device do tipo ${device.type || "desconhecido"}:`, err);
+      console.error(`Erro processando device do tipo ${configuredDevice.type || "desconhecido"}:`, err);
 
-      const dState = deviceStates[device.id];
-      const cooldownMs = device.faultCooldownMinutes
-        ? device.faultCooldownMinutes * 60 * 1000
+      const dState = deviceStates[configuredDevice.id];
+      const cooldownMs = configuredDevice.faultCooldownMinutes
+        ? configuredDevice.faultCooldownMinutes * 60 * 1000
         : cfg.defaultFaultCooldownMs;
 
       const shouldNotify =
@@ -69,6 +71,16 @@ export async function processDevices(env, accessToken, enabledDevices, deviceSta
       }
     }
   }
+}
+
+export function applyRuntimeDeviceConfig(device, cfg = {}) {
+  const byRole = device?.role ? cfg.deviceConfigs?.[device.role] : null;
+  const byId = device?.id ? cfg.deviceConfigs?.[device.id] : null;
+  return {
+    ...device,
+    ...(byRole || {}),
+    ...(byId || {}),
+  };
 }
 
 /**

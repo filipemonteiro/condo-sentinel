@@ -151,23 +151,71 @@ export const dashboardCss = `
     display: none;
   }
   .config-form {
-    max-width: 600px;
     margin: 0 auto;
+    max-width: 1100px;
+  }
+  .config-form h2,
+  .config-form h3 {
+    margin: 0 0 12px;
+  }
+  .config-form h2 {
+    font-size: 22px;
+  }
+  .config-form h3 {
+    font-size: 17px;
   }
   .config-form label {
     display: block;
-    margin-top: 16px;
+    font-size: 13px;
     font-weight: bold;
+    margin: 0 0 6px;
+  }
+  .field {
+    min-width: 0;
+  }
+  .field-wide {
+    margin-bottom: 12px;
+  }
+  .config-grid {
+    display: grid;
+    gap: 12px 16px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+  .config-section {
+    border-top: 1px solid #e5e7eb;
+    margin-top: 18px;
+    padding-top: 18px;
+  }
+  .config-device {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 14px;
+  }
+  .config-device-header {
+    align-items: flex-start;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .config-device h3 {
+    margin-bottom: 4px;
   }
   .config-form input, .config-form textarea {
+    box-sizing: border-box;
     width: 100%;
-    padding: 8px;
-    margin-top: 4px;
+    padding: 10px;
     border: 1px solid #cbd5e1;
-    border-radius: 4px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .config-actions {
+    border-top: 1px solid #e5e7eb;
+    margin-top: 18px;
+    padding-top: 18px;
   }
   .config-form button {
-    margin-top: 16px;
     padding: 10px 20px;
     background: #0f172a;
     color: white;

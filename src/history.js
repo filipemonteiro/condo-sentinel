@@ -8,7 +8,7 @@ import { toInt, isAlarmLikeValue } from './utils.js';
 /**
  * Append ponto de histórico para um device
  */
-export async function appendDeviceHistory(env, device, reading, online, now = Date.now()) {
+export async function appendDeviceHistory(env, device, reading, online, now = Date.now(), cfg = null) {
   if (!device?.id) return false;
 
   const point = buildHistoryPoint(device, reading, online, now);
@@ -28,9 +28,9 @@ export async function appendDeviceHistory(env, device, reading, online, now = Da
   }
 
   const last = history[history.length - 1];
-  const minIntervalMinutes = toInt(env.HISTORY_MIN_INTERVAL_MINUTES, 15);
+  const minIntervalMinutes = cfg?.historyMinIntervalMinutes ?? toInt(env.HISTORY_MIN_INTERVAL_MINUTES, 15);
   const minIntervalMs = minIntervalMinutes * 60 * 1000;
-  const minDeltaPercent = toInt(env.HISTORY_MIN_DELTA_PERCENT, 2);
+  const minDeltaPercent = cfg?.historyMinDeltaPercent ?? toInt(env.HISTORY_MIN_DELTA_PERCENT, 2);
 
   const shouldWrite = shouldAppendHistoryPoint({
     device,
@@ -44,7 +44,7 @@ export async function appendDeviceHistory(env, device, reading, online, now = Da
 
   history.push(point);
 
-  const maxPoints = toInt(env.HISTORY_MAX_POINTS, 288);
+  const maxPoints = cfg?.historyMaxPoints ?? toInt(env.HISTORY_MAX_POINTS, 288);
   if (history.length > maxPoints) {
     history = history.slice(-maxPoints);
   }

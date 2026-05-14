@@ -349,3 +349,88 @@ test('consecutive Tuya status failures keep error state and respect fault cooldo
   assert.match(notifications[0], /Falha ao consultar/);
   assert.match(notifications[1], /Falha ao consultar/);
 });
+
+test('Tuya batch chunk failure records API faults only for affected devices', async () => {
+  const env = makeEnv();
+  const devices = Array.from({ length: 21 }, (_, index) => ({
+    id: `valve-test-${index}`,
+    name: `Valve ${index}`,
+    role: `valve_${index}`,
+    type: 'valve',
+  }));
+  const deviceStates = Object.fromEntries(devices.map(device => [
+    device.id,
+    {
+      apiFaultActive: false,
+      offlineAlertActive: false,
+    },
+  ]));
+  const notifications = [];
+  const context = {
+    devicesById: {},
+    devicesByRole: {},
+    readingsByRole: {},
+    availabilityByRole: {},
+    batchInfoById: {},
+  };
+  let batchCalls = 0;
+
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  try {
+    await withFetch(
+      (url) => {
+        if (url.includes('/v2.0/cloud/thing/batch')) {
+          batchCalls += 1;
+          if (batchCalls === 1) {
+            return jsonResponse({
+              success: true,
+              result: devices.slice(0, 20).map(device => ({
+                id: device.id,
+                is_online: true,
+              })),
+            });
+          }
+
+          return jsonResponse({
+            success: false,
+            result: null,
+            code: 'temporary_error',
+          });
+        }
+
+        if (url.includes('/v1.0/devices/')) {
+          return jsonResponse(statusPayload([['switch_1', true]]));
+        }
+
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+      () => processDevices(
+        env,
+        'access-token',
+        devices,
+        deviceStates,
+        cfg,
+        120_000,
+        notifications,
+        context
+      )
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(batchCalls, 2);
+  assert.equal(deviceStates['valve-test-0'].apiFaultActive, false);
+  assert.equal(deviceStates['valve-test-0'].lastReading.currentValue, true);
+  assert.equal(context.availabilityByRole.valve_0.online, true);
+
+  assert.equal(deviceStates['valve-test-20'].apiFaultActive, true);
+  assert.equal(deviceStates['valve-test-20'].lastApiFaultReason, 'batch');
+  assert.equal(deviceStates['valve-test-20'].offlineAlertActive, false);
+  assert.equal(context.availabilityByRole.valve_20, undefined);
+  assert.deepEqual(context.batchInfoFailedDeviceIds, ['valve-test-20']);
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0], /Falha ao consultar/);
+});

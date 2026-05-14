@@ -3,7 +3,7 @@
  * Lógica de inspeção e gerenciamento de dispositivos
  */
 
-import { getTuyaDeviceStatus, buildBatchDeviceMap, getAllDevicesBatchInfo } from './tuya.js';
+import { getTuyaDeviceStatus, buildBatchDeviceMap, getTuyaDevicesBatchInfo } from './tuya.js';
 import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo, statusArrayToMap } from './utils.js';
 import { appendDeviceHistory } from './history.js';
 
@@ -11,11 +11,15 @@ import { appendDeviceHistory } from './history.js';
  * Processa todos os devices habilitados
  */
 export async function processDevices(env, accessToken, enabledDevices, deviceStates, cfg, now, notifications, context) {
-  // Carrega batch info de todos os devices
   const deviceIds = enabledDevices.map(device => device.id);
-  const batchInfo = await getAllDevicesBatchInfo(env, accessToken, deviceIds, cfg.logFullPayload);
-  const batchMap = buildBatchDeviceMap(batchInfo);
+  const { batchMap, failedBatchDeviceIds } = await loadBatchInfoByDevice(
+    env,
+    accessToken,
+    deviceIds,
+    cfg
+  );
   context.batchInfoById = batchMap;
+  context.batchInfoFailedDeviceIds = [...failedBatchDeviceIds];
 
   for (const device of enabledDevices) {
     const configuredDevice = applyRuntimeDeviceConfig(device, cfg);
@@ -27,6 +31,18 @@ export async function processDevices(env, accessToken, enabledDevices, deviceSta
 
     // Garante que o estado existe com defaults
     deviceStates[configuredDevice.id] = { ...deviceStates[configuredDevice.id] };
+
+    if (failedBatchDeviceIds.has(configuredDevice.id)) {
+      recordDeviceApiFault({
+        device: configuredDevice,
+        dState: deviceStates[configuredDevice.id],
+        cfg,
+        now,
+        notifications,
+        reason: 'batch',
+      });
+      continue;
+    }
 
     try {
       const result = await inspectDevice(
@@ -52,25 +68,61 @@ export async function processDevices(env, accessToken, enabledDevices, deviceSta
       await appendDeviceHistory(env, configuredDevice, result.reading, result.online, now, cfg);
     } catch (err) {
       console.error(`Erro processando device do tipo ${configuredDevice.type || "desconhecido"}:`, err);
+      recordDeviceApiFault({
+        device: configuredDevice,
+        dState: deviceStates[configuredDevice.id],
+        cfg,
+        now,
+        notifications,
+        reason: 'status',
+      });
+    }
+  }
+}
 
-      const dState = deviceStates[configuredDevice.id];
-      const cooldownMs = configuredDevice.faultCooldownMinutes
-        ? configuredDevice.faultCooldownMinutes * 60 * 1000
-        : cfg.defaultFaultCooldownMs;
+async function loadBatchInfoByDevice(env, accessToken, deviceIds, cfg) {
+  const batchInfo = [];
+  const failedBatchDeviceIds = new Set();
 
-      const shouldNotify =
-        !dState.apiFaultActive ||
-        now - (dState.lastApiFaultAlertAt || 0) > cooldownMs;
-
-      if (shouldNotify) {
-        notifications.push(
-          `⚠️ Falha ao consultar o device "${device.name || device.id}". Verifique integração, conectividade, credenciais ou assinatura da API da Tuya.`
-        );
-        dState.apiFaultActive = true;
-        dState.lastApiFaultAlertAt = now;
+  for (let i = 0; i < deviceIds.length; i += 20) {
+    const chunk = deviceIds.slice(i, i + 20);
+    try {
+      const result = await getTuyaDevicesBatchInfo(env, accessToken, chunk, cfg.logFullPayload);
+      batchInfo.push(...result);
+    } catch (err) {
+      console.error("Falha ao consultar batch de devices na Tuya. IDs omitidos por segurança.", err);
+      for (const deviceId of chunk) {
+        failedBatchDeviceIds.add(deviceId);
       }
     }
   }
+
+  return {
+    batchMap: buildBatchDeviceMap(batchInfo),
+    failedBatchDeviceIds,
+  };
+}
+
+function recordDeviceApiFault({ device, dState, cfg, now, notifications, reason }) {
+  dState.lastSeenAt = now;
+  dState.lastApiFaultReason = reason || 'unknown';
+
+  const cooldownMs = device.faultCooldownMinutes
+    ? device.faultCooldownMinutes * 60 * 1000
+    : cfg.defaultFaultCooldownMs;
+
+  const shouldNotify =
+    !dState.apiFaultActive ||
+    now - (dState.lastApiFaultAlertAt || 0) > cooldownMs;
+
+  if (shouldNotify) {
+    notifications.push(
+      `⚠️ Falha ao consultar o device "${device.name || device.id}". Verifique integração, conectividade, credenciais ou assinatura da API da Tuya.`
+    );
+    dState.lastApiFaultAlertAt = now;
+  }
+
+  dState.apiFaultActive = true;
 }
 
 export function applyRuntimeDeviceConfig(device, cfg = {}) {

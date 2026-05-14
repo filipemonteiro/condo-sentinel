@@ -78,7 +78,6 @@ The frontend is organized into separate modules for maintainability:
    - Ensure `DASHBOARD_USERS_JSON` is set in environment variables
    - Verify format: `[{"email": "your@email.com", "role": "admin"}]`
    - Check browser console (`F12`) for error messages
-   - Fallback: If you have only 1 admin and no Cloudflare Access, the system grants admin access automatically
 
 2. **Cloudflare Access not sending email header**
    - Verify Cloudflare Access is configured on your domain
@@ -99,7 +98,7 @@ The frontend is organized into separate modules for maintainability:
 1. Open browser console (`F12`)
 2. Check for `console.error()` messages
 3. Run `wrangler tail` to see worker logs
-4. Verify all environment variables are set: `wrangler env list`
+4. Verify runtime variables and secrets in the Cloudflare Workers dashboard
 
 ### Admin Configuration
 
@@ -114,12 +113,13 @@ Configuration is stored in Cloudflare KV and persists across deployments.
 
 To set up the first admin user:
 
-1. **Set `DASHBOARD_USERS_JSON` in your `wrangler.toml` (or Cloudflare Workers Dashboard):**
+1. **Set `DASHBOARD_USERS_JSON` in Cloudflare Workers settings or with Wrangler secrets/vars.**
 
-```toml
-[vars]
-DASHBOARD_USERS_JSON = '[{"email": "your-email@example.com", "role": "admin"}]'
+```bash
+npx wrangler secret put DASHBOARD_USERS_JSON
 ```
+
+Use a value like `[{"email":"your-email@example.com","role":"admin"}]`.
 
 2. **Configure Cloudflare Access (recommended):**
    - Go to your Cloudflare dashboard
@@ -141,8 +141,6 @@ DASHBOARD_USERS_JSON = '[{"email": "your-email@example.com", "role": "admin"}]'
 5. **Manage users:**
    - Use the Settings menu to add/edit users
    - User mappings are stored in KV and persist across deployments
-
-**Note:** If you're testing locally without Cloudflare Access and have only one admin user configured, the system will automatically grant admin access (fallback mode for development).
 
 For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
 
@@ -275,6 +273,8 @@ Configure these repository secrets before enabling public deployment:
 - `CLOUDFLARE_KV_NAMESPACE_ID`
 
 Runtime secrets and variables such as Tuya credentials, Telegram credentials, `DASHBOARD_ACCESS_TOKEN`, device registry, and automations should be configured in Cloudflare Workers settings or with Wrangler secrets/vars. Do not commit them.
+
+Do not place runtime secrets or placeholder `[vars]` blocks in `wrangler.example.toml`; the deploy workflow copies that file into `wrangler.toml`, and committed placeholders can replace the real dashboard token during deployment.
 
 ## Production Checklist
 

@@ -35,6 +35,13 @@ jobs:
         env:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
 
+      - name: Guard runtime secrets
+        run: |
+          if grep -Eq '^\[vars\]|DASHBOARD_ACCESS_TOKEN|CLIENT_SECRET|TUYA_CLIENT_SECRET|TELEGRAM_BOT_TOKEN' wrangler.toml; then
+            echo "wrangler.toml must not define runtime variables or secrets. Configure them in Cloudflare Workers settings/secrets instead."
+            exit 1
+          fi
+
       - name: Deploy
         run: npx wrangler deploy
         env:

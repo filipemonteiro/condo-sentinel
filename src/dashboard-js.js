@@ -83,7 +83,7 @@ export function dashboardJs(options) {
           ...options,
           headers: {
             Authorization: 'Bearer ' + getStoredToken(),
-            ...options.headers
+            ...(options.headers || {})
           }
         });
 
@@ -384,20 +384,30 @@ export function dashboardJs(options) {
       document.getElementById('auth-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const token = document.getElementById('dashboard-token').value.trim();
+
+        if (!token) {
+          showAuth('Token não pode estar vazio.');
+          return;
+        }
+
         sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
         sessionStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+
         try {
           await renderDashboard();
           showDashboard();
           refreshTimer = setInterval(() => {
             if (hasActiveSession()) {
-              renderDashboard();
+              renderDashboard().catch(err => {
+                console.error('Auto-refresh failed:', err);
+              });
             } else {
               showAuth('Sessão expirada.');
             }
           }, 60000);
         } catch (err) {
-          showAuth('Erro ao carregar dados.');
+          console.error('Auth form error:', err);
+          showAuth(err.message === 'Não autorizado' ? 'Token inválido ou sessão expirada.' : 'Erro ao carregar dados.');
         }
       });
 
@@ -421,13 +431,16 @@ export function dashboardJs(options) {
           showDashboard();
           refreshTimer = setInterval(() => {
             if (hasActiveSession()) {
-              renderDashboard();
+              renderDashboard().catch(err => {
+                console.error('Auto-refresh failed:', err);
+              });
             } else {
               showAuth('Sessão expirada.');
             }
           }, 60000);
         } catch (err) {
-          showAuth('Erro ao carregar dados.');
+          console.error('Session load error:', err);
+          showAuth(err.message === 'Não autorizado' ? 'Token inválido ou sessão expirada.' : 'Erro ao carregar dados.');
         }
       } else {
         showAuth();

@@ -163,20 +163,6 @@ async function getDashboardUser(request, env) {
     ? [...fallbackUsers, ...savedUsers]
     : savedUsers;
 
-  // Debug: Log user detection
-  if (!email) {
-    console.warn('No CF-Access-Client-Email header - Cloudflare Access may not be configured');
-    // Fallback: if only one admin exists and no email header, grant admin for local testing
-    const admins = users.filter(u => u?.role === 'admin');
-    if (admins.length === 1 && users.length === 1) {
-      console.info('Using fallback: single admin, no email detected. Granting admin access.');
-      return {
-        email: 'local-testing',
-        role: 'admin',
-      };
-    }
-  }
-
   const matched = users.find(user =>
     user && user.email && String(user.email).trim().toLowerCase() === email
   );

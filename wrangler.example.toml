@@ -18,26 +18,3 @@ enabled = true
 enabled = true
 # Keep request-level invocation logs off by default to reduce operational metadata in logs.
 invocation_logs = false
-
-[vars]
-# Dashboard access token (generate a secure random string)
-DASHBOARD_ACCESS_TOKEN = "your-secure-token-here"
-
-# Initial admin users (JSON array of {email, role})
-# Replace with your Cloudflare Access email
-DASHBOARD_USERS_JSON = '[{"email": "admin@example.com", "role": "admin"}]'
-
-# Tuya API credentials
-TUYA_ACCESS_TOKEN = "your-tuya-access-token"
-TUYA_CLIENT_ID = "your-tuya-client-id"
-TUYA_CLIENT_SECRET = "your-tuya-client-secret"
-
-# Telegram bot for notifications
-TELEGRAM_BOT_TOKEN = "your-telegram-bot-token"
-TELEGRAM_CHAT_ID = "your-telegram-chat-id"
-
-# Device registry (JSON array)
-DEVICE_REGISTRY_JSON = '[]'
-
-# Automations (JSON array)
-AUTOMATIONS_JSON = '[]'

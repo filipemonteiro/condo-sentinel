@@ -26,11 +26,57 @@ export function createDefaultDeviceState(device) {
     breachCount: 0,
     apiFaultActive: false,
     lastApiFaultAlertAt: 0,
+    batteryLowAlertActive: false,
+    lastBatteryLowAlertAt: 0,
     alarmActive: false,
     lastAlarmAt: 0,
     lastAlarmRecoveryAt: 0,
     lastReading: null,
   };
+}
+
+const DASHBOARD_RUNTIME_CONFIG_KEY = 'dashboard:runtime:config';
+const DASHBOARD_USER_ROLES_KEY = 'dashboard:runtime:user-roles';
+
+export async function loadDashboardRuntimeConfig(env) {
+  const raw = await env.STATE.get(DASHBOARD_RUNTIME_CONFIG_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.warn('Dashboard runtime config corrompida ou inválida.');
+    return null;
+  }
+}
+
+export async function saveDashboardRuntimeConfig(env, config) {
+  if (!config || typeof config !== 'object') return false;
+  const next = JSON.stringify(config);
+  const current = await env.STATE.get(DASHBOARD_RUNTIME_CONFIG_KEY);
+  if (current === next) return false;
+  await env.STATE.put(DASHBOARD_RUNTIME_CONFIG_KEY, next);
+  return true;
+}
+
+export async function loadDashboardUserMappings(env) {
+  const raw = await env.STATE.get(DASHBOARD_USER_ROLES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.warn('Dashboard user mappings corrompidos ou inválidos.');
+    return [];
+  }
+}
+
+export async function saveDashboardUserMappings(env, users) {
+  if (!Array.isArray(users)) return false;
+  const next = JSON.stringify(users);
+  const current = await env.STATE.get(DASHBOARD_USER_ROLES_KEY);
+  if (current === next) return false;
+  await env.STATE.put(DASHBOARD_USER_ROLES_KEY, next);
+  return true;
 }
 
 /**
@@ -155,6 +201,8 @@ export function mergeDeviceStateDefaults(existing, type) {
     breachCount: 0,
     apiFaultActive: false,
     lastApiFaultAlertAt: 0,
+    batteryLowAlertActive: false,
+    lastBatteryLowAlertAt: 0,
     alarmActive: false,
     lastAlarmAt: 0,
     lastAlarmRecoveryAt: 0,

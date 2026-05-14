@@ -208,6 +208,36 @@ export async function inspectWaterLevelSensor(env, accessToken, device, dState, 
   };
 
   const invalidReason = getInvalidWaterLevelReadingReason(reading);
+  const batteryThreshold = toInt(device.batteryThresholdPercent, cfg.batteryThresholdPercent);
+  const batteryCooldownMs = device.batteryCooldownMinutes
+    ? device.batteryCooldownMinutes * 60 * 1000
+    : cfg.batteryCooldownMs;
+
+  const batteryLow = Number.isFinite(reading.battery) && reading.battery <= batteryThreshold;
+  const shouldNotifyBatteryLow =
+    batteryLow &&
+    (!dState.batteryLowAlertActive || now - (dState.lastBatteryLowAlertAt || 0) > batteryCooldownMs);
+
+  if (shouldNotifyBatteryLow) {
+    notifications.push(
+      `⚠️ A bateria do device "${device.name || device.id}" está baixa (${reading.battery}%).`
+    );
+    dState.batteryLowAlertActive = true;
+    dState.lastBatteryLowAlertAt = now;
+  }
+
+  const shouldNotifyBatteryRecovery =
+    dState.batteryLowAlertActive &&
+    Number.isFinite(reading.battery) &&
+    reading.battery > batteryThreshold + 5;
+
+  if (shouldNotifyBatteryRecovery) {
+    notifications.push(
+      `✅ A bateria do device "${device.name || device.id}" foi recuperada para ${reading.battery}%.`
+    );
+    dState.batteryLowAlertActive = false;
+    dState.lastBatteryRecoveryAt = now;
+  }
 
   const faultCooldownMs = device.faultCooldownMinutes
     ? device.faultCooldownMinutes * 60 * 1000
@@ -366,6 +396,28 @@ export async function inspectGenericStatusDevice(
     );
     dState.alarmActive = false;
     dState.lastAlarmRecoveryAt = now;
+  }
+
+  const batteryThreshold = toInt(device.batteryThresholdPercent, cfg.batteryThresholdPercent);
+  const batteryCooldownMs = device.batteryCooldownMinutes
+    ? device.batteryCooldownMinutes * 60 * 1000
+    : cfg.batteryCooldownMs;
+  const batteryLow = Number.isFinite(batteryValue) && batteryValue <= batteryThreshold;
+
+  if (batteryLow && (!dState.batteryLowAlertActive || now - (dState.lastBatteryLowAlertAt || 0) > batteryCooldownMs)) {
+    notifications.push(
+      `⚠️ A bateria do device "${device.name || device.id}" está baixa (${batteryValue}%).`
+    );
+    dState.batteryLowAlertActive = true;
+    dState.lastBatteryLowAlertAt = now;
+  }
+
+  if (dState.batteryLowAlertActive && Number.isFinite(batteryValue) && batteryValue > batteryThreshold + 5) {
+    notifications.push(
+      `✅ A bateria do device "${device.name || device.id}" foi recuperada para ${batteryValue}%.`
+    );
+    dState.batteryLowAlertActive = false;
+    dState.lastBatteryRecoveryAt = now;
   }
 
   dState.lastReading = {

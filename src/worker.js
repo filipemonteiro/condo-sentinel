@@ -16,7 +16,7 @@
 
 import { parseJsonEnv, toInt, htmlResponse, jsonResponse } from './utils.js';
 import { getConfig } from './config.js';
-import { loadAllDeviceStates, saveAllDeviceStates, loadGlobalState, saveGlobalState } from './state.js';
+import { loadAllDeviceStates, saveAllDeviceStates, loadGlobalState, saveGlobalState, loadDashboardRuntimeConfig, saveDashboardRuntimeConfig, loadDashboardUserMappings, saveDashboardUserMappings } from './state.js';
 import { getTuyaToken } from './tuya.js';
 import { processDevices } from './devices.js';
 import { evaluateAutomations } from './automations.js';
@@ -66,11 +66,67 @@ export default {
 
     // Dashboard HTML
     if (url.pathname === "/dashboard") {
-      const cfg = getConfig(env);
+      const cfg = await getConfig(env);
+      const currentUser = await getDashboardUser(request, env);
       return htmlResponse(renderDashboardHtml({
         sessionTimeoutMinutes: toInt(env.DASHBOARD_SESSION_TIMEOUT_MINUTES, 30),
         dashboardTitle: cfg.dashboardTitle,
+        userRole: currentUser.role,
       }));
+    }
+
+    // Dashboard context and admin endpoints
+    if (url.pathname === "/api/dashboard-context") {
+      const authResponse = requireDashboardAuth(request, env);
+      if (authResponse) return authResponse;
+
+      const currentUser = await getDashboardUser(request, env);
+      if (request.method === "GET") {
+        const runtimeConfig = await loadDashboardRuntimeConfig(env);
+        const savedUsers = await loadDashboardUserMappings(env);
+        const fallbackUsers = parseJsonEnv(env.DASHBOARD_USERS_JSON, []);
+        const users = Array.isArray(fallbackUsers)
+          ? [...fallbackUsers, ...savedUsers]
+          : savedUsers;
+
+        return jsonResponse({
+          currentUser,
+          config: runtimeConfig || {},
+          users: currentUser.role === 'admin' ? users : [],
+        });
+      }
+
+      if (request.method === "POST") {
+        if (currentUser.role !== 'admin') {
+          return jsonResponse({ error: 'Forbidden' }, 403);
+        }
+
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body !== 'object') {
+          return jsonResponse({ error: 'Invalid payload' }, 400);
+        }
+
+        const runtimeConfig = body.config && typeof body.config === 'object' ? body.config : {};
+        const users = Array.isArray(body.users) ? body.users : [];
+
+        const normalizedUsers = users
+          .filter(u => u && u.email)
+          .map(u => ({
+            email: String(u.email).trim().toLowerCase(),
+            role: u.role === 'admin' ? 'admin' : 'viewer',
+          }));
+
+        await saveDashboardRuntimeConfig(env, runtimeConfig);
+        await saveDashboardUserMappings(env, normalizedUsers);
+
+        return jsonResponse({
+          success: true,
+          config: runtimeConfig,
+          users: normalizedUsers,
+        });
+      }
+
+      return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
     return new Response("Not found", { status: 404 });
@@ -97,6 +153,26 @@ function requireDashboardAuth(request, env) {
   return null;
 }
 
+async function getDashboardUser(request, env) {
+  const emailHeader = String(request.headers.get('CF-Access-Client-Email') || '').trim();
+  const email = emailHeader ? emailHeader.toLowerCase() : null;
+
+  const savedUsers = await loadDashboardUserMappings(env);
+  const fallbackUsers = parseJsonEnv(env.DASHBOARD_USERS_JSON, []);
+  const users = Array.isArray(fallbackUsers)
+    ? [...fallbackUsers, ...savedUsers]
+    : savedUsers;
+
+  const matched = users.find(user =>
+    user && user.email && String(user.email).trim().toLowerCase() === email
+  );
+
+  return {
+    email,
+    role: matched?.role === 'admin' ? 'admin' : 'viewer',
+  };
+}
+
 function constantTimeEqual(a, b) {
   const left = String(a);
   const right = String(b);
@@ -117,7 +193,7 @@ async function handleCheck(env) {
   const now = Date.now();
 
   // Carrega configuração
-  const cfg = getConfig(env);
+  const cfg = await getConfig(env);
 
   // Carrega dispositivos e automações
   const devices = parseJsonEnv(env.DEVICE_REGISTRY_JSON, []);

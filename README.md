@@ -39,15 +39,38 @@ This project is designed to operate within free tiers of Cloudflare Workers and 
 
 This allows sustainable operation without paid infrastructure in small environments (up to ~10 devices).
 
-## Security
+## Dashboard
 
-- No secrets in code
-- Sensitive data stored in environment variables
-- Local Cloudflare and Tuya credentials are intentionally ignored by Git
-- Dashboard APIs require `Authorization: Bearer <DASHBOARD_ACCESS_TOKEN>`
-- The dashboard stores the token only in browser session storage and expires after inactivity
-- The `/dashboard` HTML shell is public, but device data endpoints require the bearer token
-- Security headers are sent on dashboard/API responses; the dashboard loads Chart.js from jsDelivr
+The dashboard is a single-page application with role-based access:
+
+- **Viewer**: Can view device status, history, and charts
+- **Admin**: All viewer permissions plus configuration management
+
+### Features
+
+- Real-time device status with badges for alerts (offline, low battery, alarm, etc.)
+- Interactive charts for sensor history
+- Configurable dashboard title
+- Session-based authentication with inactivity timeout
+- Responsive design
+
+### Modular Architecture
+
+The frontend is organized into separate modules for maintainability:
+
+- `src/dashboard.js`: Core functions and API handlers
+- `src/dashboard-template.js`: HTML template generation
+- `src/dashboard-css.js`: Styles
+- `src/dashboard-js.js`: Client-side JavaScript logic
+
+### Admin Configuration
+
+Admins can configure:
+
+- Dashboard title (displayed in header and page title)
+- Future: Device-specific thresholds, notification rules
+
+Configuration is stored in Cloudflare KV and persists across deployments.
 
 For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
 

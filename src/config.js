@@ -55,6 +55,30 @@ export const EDITABLE_DEVICE_CONFIG_FIELDS = [
   'batteryCooldownMinutes',
 ];
 
+const RUNTIME_CONFIG_RULES = {
+  DASHBOARD_STALE_AFTER_MINUTES: { min: 1, max: 1440 },
+  DASHBOARD_SESSION_TIMEOUT_MINUTES: { min: 1, max: 1440 },
+  COOLDOWN_MINUTES: { min: 1, max: 10080 },
+  OFFLINE_COOLDOWN_MINUTES: { min: 1, max: 10080 },
+  SENSOR_COOLDOWN_MINUTES: { min: 1, max: 10080 },
+  BATTERY_THRESHOLD_PERCENT: { min: 0, max: 100 },
+  BATTERY_COOLDOWN_MINUTES: { min: 1, max: 10080 },
+  HISTORY_MAX_POINTS: { min: 1, max: 10080 },
+  HISTORY_MIN_INTERVAL_MINUTES: { min: 1, max: 1440 },
+  HISTORY_MIN_DELTA_PERCENT: { min: 0, max: 100 },
+};
+
+const DEVICE_CONFIG_RULES = {
+  thresholdPercent: { min: 0, max: 100 },
+  recoveryMarginPercent: { min: 0, max: 100 },
+  minConsecutiveBreaches: { min: 1, max: 100 },
+  cooldownMinutes: { min: 1, max: 10080 },
+  offlineCooldownMinutes: { min: 1, max: 10080 },
+  faultCooldownMinutes: { min: 1, max: 10080 },
+  batteryThresholdPercent: { min: 0, max: 100 },
+  batteryCooldownMinutes: { min: 1, max: 10080 },
+};
+
 /**
  * Retorna a configuração processada a partir das variáveis de ambiente
  */
@@ -93,10 +117,10 @@ export function normalizeDashboardRuntimeConfig(input) {
   for (const field of EDITABLE_RUNTIME_CONFIG_FIELDS) {
     if (source[field] === undefined || source[field] === null || source[field] === '') continue;
     if (field === 'DASHBOARD_TITLE') {
-      normalized[field] = String(source[field]).slice(0, 120);
+      normalized[field] = String(source[field]).trim().slice(0, 120);
     } else {
-      const value = toInt(source[field], null);
-      if (Number.isFinite(value)) normalized[field] = value;
+      const value = normalizeBoundedInt(source[field], RUNTIME_CONFIG_RULES[field]);
+      if (value !== null) normalized[field] = value;
     }
   }
 
@@ -108,8 +132,8 @@ export function normalizeDashboardRuntimeConfig(input) {
       const safeConfig = {};
       for (const field of EDITABLE_DEVICE_CONFIG_FIELDS) {
         if (config[field] === undefined || config[field] === null || config[field] === '') continue;
-        const value = toInt(config[field], null);
-        if (Number.isFinite(value)) safeConfig[field] = value;
+        const value = normalizeBoundedInt(config[field], DEVICE_CONFIG_RULES[field]);
+        if (value !== null) safeConfig[field] = value;
       }
 
       if (Object.keys(safeConfig).length > 0) {
@@ -121,6 +145,14 @@ export function normalizeDashboardRuntimeConfig(input) {
   }
 
   return normalized;
+}
+
+function normalizeBoundedInt(value, rule) {
+  const parsed = toInt(value, null);
+  if (!Number.isFinite(parsed)) return null;
+  if (!rule) return parsed;
+  if (parsed < rule.min || parsed > rule.max) return null;
+  return parsed;
 }
 
 /**

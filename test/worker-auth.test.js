@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import worker from '../src/worker.js';
+import worker, { handleCheck } from '../src/worker.js';
 import { escapeHtmlText, renderDashboardHtml } from '../src/dashboard.js';
 
 const env = {
@@ -18,6 +18,7 @@ const env = {
 
 const historyEnv = {
   ...env,
+  DEVICE_REGISTRY_JSON: '[{"id":"device-test","type":"water_level_sensor"}]',
   STATE: {
     async get(key) {
       if (key === 'history:device:device-test') {
@@ -97,6 +98,21 @@ test('history API returns points envelope expected by dashboard charts', async (
     deviceId: 'device-test',
     points: [{ ts: 1000, type: 'water_level_sensor', online: true, percent: 80 }],
   });
+});
+
+test('history API rejects unknown device ids', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/history?device=unknown-device', {
+      headers: {
+        Authorization: 'Bearer secret-token',
+      },
+    }),
+    historyEnv,
+    {}
+  );
+
+  assert.equal(res.status, 404);
+  assert.deepEqual(await res.json(), { error: 'Unknown device' });
 });
 
 test('dashboard context returns admin role from Cloudflare Access email', async () => {
@@ -285,4 +301,71 @@ test('dashboard escapes configured title before rendering HTML', () => {
   assert.doesNotMatch(html, /<img src=x/);
   assert.match(html, /&lt;img src=x onerror=alert\(&quot;x&quot;\)&gt;/);
   assert.match(html, /replace\(\/'\/g, '&#39;'\)/);
+});
+
+test('scheduled check persists device state even when Telegram send fails', async () => {
+  const state = makeState({
+    'tuya:access_token': JSON.stringify({
+      token: 'cached-access-token',
+      expiresAt: Date.now() + 600_000,
+    }),
+  });
+  const runEnv = {
+    ...env,
+    ...state,
+    DRY_RUN: 'false',
+    CLIENT_ID: 'test-client-id',
+    CLIENT_SECRET: 'test-client-secret',
+    TUYA_BASE: 'https://tuya.test',
+    TELEGRAM_BOT_TOKEN: 'telegram-token',
+    TELEGRAM_CHAT_ID: 'chat-id',
+    DEVICE_REGISTRY_JSON: JSON.stringify([
+      {
+        id: 'valve-test',
+        name: 'Main valve',
+        type: 'valve',
+      },
+    ]),
+  };
+
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  globalThis.fetch = async (url) => {
+    const textUrl = String(url);
+    if (textUrl.includes('/v2.0/cloud/thing/batch')) {
+      return new Response(JSON.stringify({
+        success: true,
+        result: [{ id: 'valve-test', is_online: false }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (textUrl.includes('api.telegram.org')) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error_code: 500,
+        description: 'telegram unavailable',
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${textUrl}`);
+  };
+
+  try {
+    await assert.rejects(() => handleCheck(runEnv), /Erro ao enviar mensagem no Telegram/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+
+  const savedDeviceState = JSON.parse(state.store.get('state:device:valve-test'));
+  assert.equal(savedDeviceState.offlineAlertActive, true);
+  assert.equal(savedDeviceState.lastBatchIsOnline, false);
+  assert.equal(state.store.has('condo_automation_state'), true);
 });

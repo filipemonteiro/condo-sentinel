@@ -70,6 +70,40 @@ test('normalizes only editable dashboard and device runtime fields', () => {
   );
 });
 
+test('drops dashboard and device config values outside supported ranges', () => {
+  assert.deepEqual(
+    normalizeDashboardRuntimeConfig({
+      DASHBOARD_TITLE: `  ${'A'.repeat(130)}  `,
+      COOLDOWN_MINUTES: '-1',
+      OFFLINE_COOLDOWN_MINUTES: '10081',
+      SENSOR_COOLDOWN_MINUTES: '30',
+      BATTERY_THRESHOLD_PERCENT: '101',
+      HISTORY_MAX_POINTS: '0',
+      HISTORY_MIN_DELTA_PERCENT: '50',
+      devices: {
+        'device-test': {
+          thresholdPercent: 101,
+          recoveryMarginPercent: 10,
+          minConsecutiveBreaches: 0,
+          cooldownMinutes: 60,
+          batteryThresholdPercent: -1,
+        },
+      },
+    }),
+    {
+      DASHBOARD_TITLE: 'A'.repeat(120),
+      SENSOR_COOLDOWN_MINUTES: 30,
+      HISTORY_MIN_DELTA_PERCENT: 50,
+      devices: {
+        'device-test': {
+          recoveryMarginPercent: 10,
+          cooldownMinutes: 60,
+        },
+      },
+    }
+  );
+});
+
 test('runtime device config overrides registry config by role and id', () => {
   const device = {
     id: 'device-test',

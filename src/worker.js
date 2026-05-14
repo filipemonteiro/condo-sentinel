@@ -60,6 +60,14 @@ export default {
       if (authResponse) return authResponse;
 
       const deviceId = url.searchParams.get("device");
+      if (!deviceId) {
+        return handleApiHistory(env, deviceId);
+      }
+
+      if (!isRegisteredDeviceId(env, deviceId)) {
+        return jsonResponse({ error: "Unknown device" }, 404);
+      }
+
       const history = await handleApiHistory(env, deviceId);
       return history;
     }
@@ -288,7 +296,7 @@ function constantTimeEqual(a, b) {
 /**
  * Função principal de verificação
  */
-async function handleCheck(env) {
+export async function handleCheck(env) {
   const now = Date.now();
 
   // Carrega configuração
@@ -354,19 +362,41 @@ async function handleCheck(env) {
     });
   }
 
-  // Envia notificações
-  if (notifications.length > 0) {
-    const message = notifications.join("\n\n");
-    await sendTelegramMessage(env, message, cfg.dryRun);
-  }
+  let notificationError = null;
 
-  // Salva estados
-  await saveAllDeviceStates(env, deviceStates);
-  await saveGlobalState(env, globalState);
+  try {
+    if (notifications.length > 0) {
+      const message = notifications.join("\n\n");
+      await sendTelegramMessage(env, message, cfg.dryRun);
+    }
+  } catch (err) {
+    notificationError = err;
+    console.error("Falha ao enviar notificações; estados serão persistidos mesmo assim.", err);
+  } finally {
+    await saveAllDeviceStates(env, deviceStates);
+    await saveGlobalState(env, globalState);
+  }
 
   console.log("Execução concluída.", {
     deviceCount: enabledDevices.length,
     notifications: notifications.length,
     automationCount: Array.isArray(automations) ? automations.length : 0,
   });
+
+  if (notificationError) {
+    throw notificationError;
+  }
+}
+
+function isRegisteredDeviceId(env, deviceId) {
+  if (!deviceId) return false;
+
+  const devices = parseJsonEnv(env.DEVICE_REGISTRY_JSON, []);
+  if (!Array.isArray(devices)) return false;
+
+  return devices.some(device =>
+    device &&
+    device.id &&
+    String(device.id) === String(deviceId)
+  );
 }

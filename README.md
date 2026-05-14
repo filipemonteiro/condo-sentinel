@@ -63,6 +63,44 @@ The frontend is organized into separate modules for maintainability:
 - `src/dashboard-css.js`: Styles
 - `src/dashboard-js.js`: Client-side JavaScript logic
 
+### Troubleshooting
+
+#### Dashboard shows no data / Menu doesn't appear
+
+**Problem:** Dashboard appears but:
+- Summary cards show empty
+- No devices listed
+- "Configurações" (Settings) button is missing
+
+**Causes & Solutions:**
+
+1. **Not recognized as admin (most common)**
+   - Ensure `DASHBOARD_USERS_JSON` is set in environment variables
+   - Verify format: `[{"email": "your@email.com", "role": "admin"}]`
+   - Check browser console (`F12`) for error messages
+   - Fallback: If you have only 1 admin and no Cloudflare Access, the system grants admin access automatically
+
+2. **Cloudflare Access not sending email header**
+   - Verify Cloudflare Access is configured on your domain
+   - Check that login method is enabled (Google, GitHub, etc.)
+   - Access the dashboard through your domain protected by Cloudflare Access, not directly via IP
+
+3. **API call failures**
+   - Open browser console (`F12`)
+   - Check for error messages in Network tab
+   - Verify `DASHBOARD_ACCESS_TOKEN` is set and matches in browser
+   - Check worker logs: `wrangler tail`
+
+4. **DEVICE_REGISTRY_JSON is empty**
+   - If configured with `[]`, no devices will show
+   - Add devices using the proper format (see Configuration section)
+
+**Debug steps:**
+1. Open browser console (`F12`)
+2. Check for `console.error()` messages
+3. Run `wrangler tail` to see worker logs
+4. Verify all environment variables are set: `wrangler env list`
+
 ### Admin Configuration
 
 Admins can configure:
@@ -71,6 +109,40 @@ Admins can configure:
 - Future: Device-specific thresholds, notification rules
 
 Configuration is stored in Cloudflare KV and persists across deployments.
+
+#### Creating the First Admin
+
+To set up the first admin user:
+
+1. **Set `DASHBOARD_USERS_JSON` in your `wrangler.toml` (or Cloudflare Workers Dashboard):**
+
+```toml
+[vars]
+DASHBOARD_USERS_JSON = '[{"email": "your-email@example.com", "role": "admin"}]'
+```
+
+2. **Configure Cloudflare Access (recommended):**
+   - Go to your Cloudflare dashboard
+   - Navigate to "Access" → "Applications"
+   - Add a new application for your dashboard domain
+   - Set "Login method" to your preferred provider (Google, GitHub, etc.)
+   - This will send the `CF-Access-Client-Email` header
+
+3. **Deploy the worker:**
+   ```bash
+   wrangler deploy
+   ```
+
+4. **Access the dashboard:**
+   - Visit `/dashboard` and enter your `DASHBOARD_ACCESS_TOKEN`
+   - If Cloudflare Access is configured, your email will be recognized as admin
+   - You'll see the "Configurações" (Settings) menu
+
+5. **Manage users:**
+   - Use the Settings menu to add/edit users
+   - User mappings are stored in KV and persist across deployments
+
+**Note:** If you're testing locally without Cloudflare Access and have only one admin user configured, the system will automatically grant admin access (fallback mode for development).
 
 For vulnerability reporting and sensitive-data guidance, see [SECURITY.md](SECURITY.md).
 

@@ -78,25 +78,32 @@ export function dashboardJs(options) {
         throw new Error('Sessão expirada');
       }
 
-      const res = await fetch(url, {
-        ...options,
-        headers: {
-          Authorization: 'Bearer ' + getStoredToken(),
-          ...options.headers
+      try {
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            Authorization: 'Bearer ' + getStoredToken(),
+            ...options.headers
+          }
+        });
+
+        if (res.status === 401 || res.status === 503) {
+          showAuth(res.status === 503 ? 'Token não configurado no servidor.' : 'Token inválido ou sessão expirada.');
+          throw new Error('Não autorizado');
         }
-      });
 
-      if (res.status === 401 || res.status === 503) {
-        showAuth(res.status === 503 ? 'Token não configurado no servidor.' : 'Token inválido ou sessão expirada.');
-        throw new Error('Não autorizado');
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => 'unknown error');
+          console.error('API error:', { status: res.status, url, error: errorText });
+          throw new Error('Erro na requisição: ' + res.status);
+        }
+
+        touchSession();
+        return res;
+      } catch (err) {
+        console.error('Fetch failed:', { url, error: err.message });
+        throw err;
       }
-
-      if (!res.ok) {
-        throw new Error('Erro na requisição: ' + res.status);
-      }
-
-      touchSession();
-      return res;
     }
 
     function formatTs(ts) {
@@ -327,9 +334,18 @@ export function dashboardJs(options) {
     }
 
     async function renderDashboard() {
-      const status = await loadStatus();
-      renderSummary(status.summary);
-      await renderDevices(status.devices);
+      try {
+        const status = await loadStatus();
+        if (!status || !status.summary || !status.devices) {
+          console.error('Invalid status response:', status);
+          throw new Error('Invalid status response');
+        }
+        renderSummary(status.summary);
+        await renderDevices(status.devices);
+      } catch (err) {
+        console.error('renderDashboard failed:', err);
+        throw err;
+      }
     }
 
     function renderConfigForm(config) {
@@ -348,10 +364,19 @@ export function dashboardJs(options) {
     }
 
     async function saveConfigForm() {
-      const title = document.getElementById('config-title').value.trim();
-      await saveConfig({ dashboardTitle: title });
-      alert('Configuração salva!');
-      // Optionally reload or update title
+      try {
+        const title = document.getElementById('config-title').value.trim();
+        const result = await saveConfig({ dashboardTitle: title });
+        if (result.success) {
+          alert('Configuração salva!');
+        } else {
+          console.error('Save failed:', result);
+          alert('Erro ao salvar: ' + (result.error || 'unknown error'));
+        }
+      } catch (err) {
+        console.error('saveConfigForm failed:', err);
+        alert('Erro ao salvar configuração.');
+      }
     }
 
     async function init() {

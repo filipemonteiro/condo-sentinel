@@ -187,7 +187,7 @@ export async function saveGlobalState(env, state) {
   return true;
 }
 
-export function mergeDeviceStateDefaults(existing, type) {
+export function mergeDeviceStateDefaults(existing) {
   return {
     offlineAlertActive: false,
     lastOfflineAlertAt: 0,
@@ -211,7 +211,6 @@ export function mergeDeviceStateDefaults(existing, type) {
     lastBatchInfo: null,
     lastReading: null,
     ...(existing || {}),
-    _type: type,
   };
 }
 

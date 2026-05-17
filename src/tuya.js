@@ -185,21 +185,6 @@ export async function getTuyaDevicesBatchInfo(env, accessToken, deviceIds, logFu
 }
 
 /**
- * Obtém batch info de todos os devices (com paginação)
- */
-export async function getAllDevicesBatchInfo(env, accessToken, deviceIds, logFullPayload = false) {
-  const results = [];
-
-  for (let i = 0; i < deviceIds.length; i += 20) {
-    const chunk = deviceIds.slice(i, i + 20);
-    const batch = await getTuyaDevicesBatchInfo(env, accessToken, chunk, logFullPayload);
-    results.push(...batch);
-  }
-
-  return results;
-}
-
-/**
  * Constrói map de devices por ID
  */
 export function buildBatchDeviceMap(batchResult) {

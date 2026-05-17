@@ -93,10 +93,7 @@ export default {
         const cfg = await getConfig(env);
         const runtimeConfig = await loadDashboardRuntimeConfig(env);
         const savedUsers = await loadDashboardUserMappings(env);
-        const fallbackUsers = parseJsonEnv(env.DASHBOARD_USERS_JSON, []);
-        const users = Array.isArray(fallbackUsers)
-          ? [...fallbackUsers, ...savedUsers]
-          : savedUsers;
+        const users = mergeUsers(parseJsonEnv(env.DASHBOARD_USERS_JSON, []), savedUsers);
 
         return jsonResponse({
           currentUser,
@@ -256,6 +253,18 @@ function requireDashboardAuth(request, env) {
   return null;
 }
 
+function mergeUsers(envUsers, kvUsers) {
+  const merged = new Map();
+  for (const u of (Array.isArray(envUsers) ? envUsers : [])) {
+    if (u?.email) merged.set(String(u.email).trim().toLowerCase(), u);
+  }
+  // KV entries override env vars — they were set explicitly by an admin
+  for (const u of kvUsers) {
+    if (u?.email) merged.set(String(u.email).trim().toLowerCase(), u);
+  }
+  return [...merged.values()];
+}
+
 async function getDashboardUser(request, env) {
   const emailHeader = String(
     request.headers.get('Cf-Access-Authenticated-User-Email') ||
@@ -265,10 +274,7 @@ async function getDashboardUser(request, env) {
   const email = emailHeader ? emailHeader.toLowerCase() : null;
 
   const savedUsers = await loadDashboardUserMappings(env);
-  const fallbackUsers = parseJsonEnv(env.DASHBOARD_USERS_JSON, []);
-  const users = Array.isArray(fallbackUsers)
-    ? [...fallbackUsers, ...savedUsers]
-    : savedUsers;
+  const users = mergeUsers(parseJsonEnv(env.DASHBOARD_USERS_JSON, []), savedUsers);
 
   const matched = users.find(user =>
     user && user.email && String(user.email).trim().toLowerCase() === email

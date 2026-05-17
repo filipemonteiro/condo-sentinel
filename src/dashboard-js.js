@@ -184,7 +184,7 @@ export function dashboardJs(options) {
     }
 
     function card(title, value) {
-      return '<div class="card"><div class="muted">' + escHtml(title) + '</div><div style="font-size:28px;font-weight:bold;margin-top:8px;">' + escHtml(String(value)) + '</div></div>';
+      return '<div class="card metric-card"><div class="metric-value mono">' + escHtml(String(value)) + '</div><div class="metric-label">' + escHtml(title) + '</div></div>';
     }
 
     function renderSummary(summary) {
@@ -226,39 +226,69 @@ export function dashboardJs(options) {
     }
 
     function renderDeviceCard(device) {
+      const online = device.online;
+      const hasAlert = device.lowLevelAlertActive || device.sensorFaultActive || device.alarmActive || device.batteryLowAlertActive;
+      let levelBar = '';
       let extra = '';
 
       if (device.type === 'water_level_sensor') {
+        const pct = device.lastReading?.percent;
+        const pctNum = typeof pct === 'number' ? pct : null;
+        let barColor = 'var(--status-online)';
+        if (pctNum !== null && pctNum < 25) barColor = 'var(--status-offline)';
+        else if (pctNum !== null && pctNum < 50) barColor = 'var(--status-warning)';
+
+        if (pctNum !== null) {
+          levelBar = \`
+            <div class="level-bar-wrap"><div class="level-bar" style="width:\${pctNum}%;background:\${barColor};"></div></div>
+            <div class="level-bar-label"><span class="mono">\${pctNum}%</span> nível atual</div>
+          \`;
+        }
+
         extra = \`
-          <div><strong>Nível:</strong> \${escHtml(device.lastReading?.percent) ?? '-' }%</div>
-          <div><strong>Estado:</strong> \${escHtml(device.lastReading?.liquidState) ?? '-'}</div>
-          <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
-          <div><strong>Breach count:</strong> \${escHtml(device.breachCount) ?? 0}</div>
-          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
+          <div class="device-stats">
+            <div class="device-stat"><span class="stat-label">Nível</span><span class="stat-value mono">\${escHtml(device.lastReading?.percent)}%</span></div>
+            <div class="device-stat"><span class="stat-label">Estado</span><span class="stat-value">\${escHtml(device.lastReading?.liquidState)}</span></div>
+            <div class="device-stat"><span class="stat-label">Bateria</span><span class="stat-value mono">\${escHtml(device.lastReading?.battery)}%</span></div>
+            <div class="device-stat"><span class="stat-label">Brechas</span><span class="stat-value mono">\${escHtml(device.breachCount) !== '-' ? escHtml(device.breachCount) : 0}</span></div>
+          </div>
+          <div class="device-freshness">\${escHtml(getReadingFreshnessText(device))}</div>
         \`;
       } else if (device.type === 'gas_sensor' || device.type === 'water_leak_sensor') {
         extra = \`
-          <div><strong>Alarme:</strong> \${escHtml(device.lastReading?.alarmValue) ?? '-'}</div>
-          <div><strong>Bateria:</strong> \${escHtml(device.lastReading?.battery) ?? '-' }%</div>
-          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
+          <div class="device-stats">
+            <div class="device-stat"><span class="stat-label">Alarme</span><span class="stat-value">\${escHtml(device.lastReading?.alarmValue)}</span></div>
+            <div class="device-stat"><span class="stat-label">Bateria</span><span class="stat-value mono">\${escHtml(device.lastReading?.battery)}%</span></div>
+          </div>
+          <div class="device-freshness">\${escHtml(getReadingFreshnessText(device))}</div>
         \`;
       } else if (device.type === 'valve') {
         extra = \`
-          <div><strong>Status:</strong> \${escHtml(device.lastReading?.currentValue) ?? '-'}</div>
-          <div class="small" style="margin-top:6px;">\${escHtml(getReadingFreshnessText(device))}</div>
+          <div class="device-stats">
+            <div class="device-stat"><span class="stat-label">Status</span><span class="stat-value">\${escHtml(device.lastReading?.currentValue)}</span></div>
+          </div>
+          <div class="device-freshness">\${escHtml(getReadingFreshnessText(device))}</div>
         \`;
       } else {
         extra = '<div class="muted">Tipo ainda sem visual específico.</div>';
       }
 
       return \`
-        <div class="card">
-          <h3 style="margin-top:0;">\${escHtml(device.name)}</h3>
-          <div class="muted">\${escHtml(device.role) || '-'} • \${escHtml(device.type)}</div>
-          <div style="margin:10px 0;">\${deviceStatusBadges(device)}</div>
-          <div><strong>Última checagem do worker:</strong> \${escHtml(formatTs(device.lastSeenAt))}</div>
-          <div><strong>Leitura registrada:</strong> \${escHtml(formatTs(device.readingUpdatedAt))}</div>
+        <div class="card device-card\${hasAlert ? ' device-alert' : ''}\${!online ? ' device-offline' : ''}">
+          <div class="device-header">
+            <div class="device-name-row">
+              <span class="status-dot\${online ? ' pulse' : ' status-bad'}"></span>
+              <span class="device-name">\${escHtml(device.name)}</span>
+            </div>
+            <div class="device-meta">\${escHtml(device.role) || '-'} · <span class="mono">\${escHtml(device.type)}</span></div>
+          </div>
+          <div class="device-badges">\${deviceStatusBadges(device)}</div>
+          \${levelBar}
           \${extra}
+          <div class="device-timestamps">
+            <div><span class="stat-label">Checagem</span> <span class="mono">\${escHtml(formatTs(device.lastSeenAt))}</span></div>
+            <div><span class="stat-label">Leitura</span> <span class="mono">\${escHtml(formatTs(device.readingUpdatedAt))}</span></div>
+          </div>
         </div>
       \`;
     }
@@ -342,14 +372,21 @@ export function dashboardJs(options) {
         charts[device.id].destroy();
       }
 
+      chartData.datasets[0].borderColor = 'oklch(0.72 0.15 195)';
+      chartData.datasets[0].backgroundColor = 'oklch(0.72 0.15 195 / 0.1)';
+
       charts[device.id] = new Chart(el, {
         type: 'line',
         data: chartData,
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: 'oklch(0.55 0.01 260)', font: { size: 11 } } }
+          },
           scales: {
-            y: yConfig
+            x: { ticks: { color: 'oklch(0.55 0.01 260)', font: { size: 10 } }, grid: { color: 'oklch(0.22 0.01 260)' } },
+            y: { ...yConfig, ticks: { ...yConfig.ticks, color: 'oklch(0.55 0.01 260)', font: { size: 10 } }, grid: { color: 'oklch(0.22 0.01 260)' } }
           }
         }
       });
@@ -555,14 +592,21 @@ export function dashboardJs(options) {
         ? { min: 0, max: 100 }
         : { min: 0, max: 1, ticks: { stepSize: 1 } };
 
+      chartData.datasets[0].borderColor = 'oklch(0.72 0.15 195)';
+      chartData.datasets[0].backgroundColor = 'oklch(0.72 0.15 195 / 0.1)';
+
       charts.history = new Chart(el, {
         type: 'line',
         data: chartData,
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: 'oklch(0.55 0.01 260)', font: { size: 11 } } }
+          },
           scales: {
-            y: yConfig
+            x: { ticks: { color: 'oklch(0.55 0.01 260)', font: { size: 10 } }, grid: { color: 'oklch(0.22 0.01 260)' } },
+            y: { ...yConfig, ticks: { ...yConfig.ticks, color: 'oklch(0.55 0.01 260)', font: { size: 10 } }, grid: { color: 'oklch(0.22 0.01 260)' } }
           }
         }
       });

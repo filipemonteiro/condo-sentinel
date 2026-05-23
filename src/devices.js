@@ -125,6 +125,17 @@ function recordDeviceApiFault({ device, dState, cfg, now, notifications, reason 
   dState.apiFaultActive = true;
 }
 
+function recordDeviceApiRecovery({ device, dState, now, notifications }) {
+  if (!dState.apiFaultActive) return;
+
+  notifications.push(
+    `✅ A consulta ao device "${device.name || device.id}" foi restabelecida.`
+  );
+  dState.apiFaultActive = false;
+  dState.lastApiFaultRecoveryAt = now;
+  dState.lastApiFaultReason = null;
+}
+
 export function applyRuntimeDeviceConfig(device, cfg = {}) {
   const byRole = device?.role ? cfg.deviceConfigs?.[device.role] : null;
   const byId = device?.id ? cfg.deviceConfigs?.[device.id] : null;
@@ -150,6 +161,8 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
     : cfg.defaultOfflineCooldownMs;
 
   if (!isOnline) {
+    recordDeviceApiRecovery({ device, dState, now, notifications });
+
     const shouldNotifyOffline =
       !dState.offlineAlertActive ||
       now - (dState.lastOfflineAlertAt || 0) > offlineCooldownMs;
@@ -161,8 +174,6 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       dState.offlineAlertActive = true;
       dState.lastOfflineAlertAt = now;
     }
-
-    dState.apiFaultActive = false;
 
     return {
       online: false,
@@ -243,7 +254,7 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       break;
   }
 
-  dState.apiFaultActive = false;
+  recordDeviceApiRecovery({ device, dState, now, notifications });
 
   return {
     online: true,

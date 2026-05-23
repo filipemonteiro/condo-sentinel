@@ -23,6 +23,11 @@ import { evaluateAutomations } from './automations.js';
 import { buildDashboardStatus, renderDashboardHtml, handleApiHistory } from './dashboard.js';
 import { sendTelegramMessage } from './notifications.js';
 
+const TUYA_TOKEN_FAULT_MESSAGE =
+  "⚠️ Falha ao obter token da Tuya. Verifique credenciais, conectividade ou assinatura da API antes da próxima verificação.";
+const TUYA_TOKEN_RECOVERY_MESSAGE =
+  "✅ A autenticação com a Tuya foi restabelecida.";
+
 /**
  * Handler principal do worker
  */
@@ -334,7 +339,6 @@ export async function handleCheck(env) {
   // Carrega estados
   const deviceStates = await loadAllDeviceStates(env, enabledDevices);
   const globalState = await loadGlobalState(env);
-  const accessToken = await getTuyaToken(env);
 
   const notifications = [];
   const context = {
@@ -345,20 +349,31 @@ export async function handleCheck(env) {
     batchInfoById: {},
   };
 
-  // Processa dispositivos
-  await processDevices(
-    env,
-    accessToken,
-    enabledDevices,
-    deviceStates,
-    cfg,
-    now,
-    notifications,
-    context
-  );
+  let accessToken = null;
+  try {
+    accessToken = await getTuyaToken(env);
+    recordTuyaTokenRecovery(globalState, now, notifications);
+  } catch (err) {
+    console.error("Falha ao obter token da Tuya; verificação de devices será ignorada.", err);
+    recordTuyaTokenFault(globalState, cfg, now, notifications);
+  }
 
-  // Avalia automações
-  if (Array.isArray(automations) && automations.length > 0) {
+  // Processa dispositivos
+  if (accessToken) {
+    await processDevices(
+      env,
+      accessToken,
+      enabledDevices,
+      deviceStates,
+      cfg,
+      now,
+      notifications,
+      context
+    );
+  }
+
+  // Avalia automações apenas quando a coleta Tuya ocorreu nesta execução.
+  if (accessToken && Array.isArray(automations) && automations.length > 0) {
     await evaluateAutomations({
       automations,
       state: globalState,
@@ -369,14 +384,32 @@ export async function handleCheck(env) {
   }
 
   let notificationError = null;
+  globalState.pendingNotifications = removePendingNotificationsForRecoveries(
+    globalState.pendingNotifications,
+    notifications
+  );
+
+  const {
+    deferredPendingNotifications,
+    notificationsToSend,
+  } = buildNotificationBatch(globalState.pendingNotifications, notifications, now);
 
   try {
-    if (notifications.length > 0) {
-      const message = notifications.join("\n\n");
+    if (notificationsToSend.length > 0) {
+      const message = notificationsToSend.join("\n\n");
       await sendTelegramMessage(env, message, cfg.dryRun);
     }
+    globalState.pendingNotifications = deferredPendingNotifications;
   } catch (err) {
     notificationError = err;
+    globalState.pendingNotifications = mergePendingNotifications(
+      deferredPendingNotifications,
+      notificationsToSend.map(message => ({
+        message,
+        lastAttemptAt: now,
+        nextAttemptAt: now + cfg.defaultFaultCooldownMs,
+      }))
+    );
     console.error("Falha ao enviar notificações; estados serão persistidos mesmo assim.", err);
   } finally {
     await saveAllDeviceStates(env, deviceStates);
@@ -385,13 +418,149 @@ export async function handleCheck(env) {
 
   console.log("Execução concluída.", {
     deviceCount: enabledDevices.length,
-    notifications: notifications.length,
+    notifications: notificationsToSend.length,
     automationCount: Array.isArray(automations) ? automations.length : 0,
   });
 
   if (notificationError) {
     throw notificationError;
   }
+}
+
+function dedupeNotifications(messages) {
+  return [...new Set((Array.isArray(messages) ? messages : [])
+    .filter(Boolean)
+    .map(message => String(message)))];
+}
+
+function buildNotificationBatch(pendingNotifications, notifications, now) {
+  const normalizedPending = normalizePendingNotifications(pendingNotifications);
+  const deferredPendingNotifications = normalizedPending.filter(item => item.nextAttemptAt > now);
+  const duePendingMessages = normalizedPending
+    .filter(item => item.nextAttemptAt <= now)
+    .map(item => item.message);
+
+  return {
+    deferredPendingNotifications,
+    notificationsToSend: dedupeNotifications([
+      ...duePendingMessages,
+      ...(Array.isArray(notifications) ? notifications : []),
+    ]),
+  };
+}
+
+function normalizePendingNotifications(pendingNotifications) {
+  if (!Array.isArray(pendingNotifications)) return [];
+
+  return pendingNotifications
+    .map(item => {
+      if (typeof item === 'string') {
+        return {
+          message: item,
+          lastAttemptAt: 0,
+          nextAttemptAt: 0,
+        };
+      }
+
+      if (!item || typeof item !== 'object' || !item.message) return null;
+
+      return {
+        message: String(item.message),
+        lastAttemptAt: Number.isFinite(item.lastAttemptAt) ? item.lastAttemptAt : 0,
+        nextAttemptAt: Number.isFinite(item.nextAttemptAt) ? item.nextAttemptAt : 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+function removePendingNotificationsByMessage(pendingNotifications, message) {
+  return normalizePendingNotifications(pendingNotifications)
+    .filter(item => item.message !== message);
+}
+
+function removePendingNotificationsForRecoveries(pendingNotifications, notifications) {
+  const normalizedPending = normalizePendingNotifications(pendingNotifications);
+  const recoveryMessages = Array.isArray(notifications)
+    ? notifications.map(String)
+    : [];
+
+  const removalPatterns = [];
+
+  for (const recoveryMessage of recoveryMessages) {
+    if (recoveryMessage === TUYA_TOKEN_RECOVERY_MESSAGE) {
+      removalPatterns.push(message => message === TUYA_TOKEN_FAULT_MESSAGE);
+      continue;
+    }
+
+    const exactMatch = (prefix, recoveryRegex) => {
+      const match = recoveryMessage.match(recoveryRegex);
+      if (!match) return;
+      const target = match[1];
+      const failurePrefix = `${prefix}${target}"`;
+      removalPatterns.push(message => message.startsWith(failurePrefix));
+    };
+
+    exactMatch('⚠️ Falha ao consultar o device "', /^✅ A consulta ao device "([^"]+)" foi restabelecida\.$/);
+    exactMatch('⚠️ O device "', /^✅ O device "([^"]+)" voltou a ficar online\.$/);
+    exactMatch('🚨 O device "', /^✅ O device "([^"]+)" saiu do estado de alarme\.$/);
+    exactMatch('⚠️ A bateria do device "', /^✅ A bateria do device "([^"]+)" foi recuperada para /);
+    exactMatch('⚠️ O sensor "', /^✅ A leitura do sensor "([^"]+)" foi restabelecida\. Nível atual: /);
+    exactMatch('⚠️ O nível do sensor "', /^✅ O nível do sensor "([^"]+)" normalizou em /);
+  }
+
+  if (removalPatterns.length === 0) {
+    return normalizedPending;
+  }
+
+  return normalizedPending.filter(item => {
+    for (const shouldRemove of removalPatterns) {
+      if (shouldRemove(item.message)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function mergePendingNotifications(left, right) {
+  const byMessage = new Map();
+  for (const item of [...normalizePendingNotifications(left), ...normalizePendingNotifications(right)]) {
+    byMessage.set(item.message, item);
+  }
+  return [...byMessage.values()];
+}
+
+function recordTuyaTokenFault(globalState, cfg, now, notifications) {
+  globalState.integrations = globalState.integrations || {};
+  const tuyaState = globalState.integrations.tuya || {};
+  const cooldownMs = cfg.defaultFaultCooldownMs;
+  const shouldNotify =
+    !tuyaState.tokenFaultActive ||
+    now - (tuyaState.lastTokenFaultAlertAt || 0) > cooldownMs;
+
+  if (shouldNotify) {
+    notifications.push(TUYA_TOKEN_FAULT_MESSAGE);
+    tuyaState.lastTokenFaultAlertAt = now;
+  }
+
+  tuyaState.tokenFaultActive = true;
+  tuyaState.lastTokenFaultAt = now;
+  globalState.integrations.tuya = tuyaState;
+}
+
+function recordTuyaTokenRecovery(globalState, now, notifications) {
+  const tuyaState = globalState.integrations?.tuya;
+  if (!tuyaState?.tokenFaultActive) return;
+
+  globalState.pendingNotifications = removePendingNotificationsByMessage(
+    globalState.pendingNotifications,
+    TUYA_TOKEN_FAULT_MESSAGE
+  );
+
+  notifications.push(TUYA_TOKEN_RECOVERY_MESSAGE);
+  tuyaState.tokenFaultActive = false;
+  tuyaState.lastTokenRecoveryAt = now;
+  globalState.integrations.tuya = tuyaState;
 }
 
 function isRegisteredDeviceId(env, deviceId) {

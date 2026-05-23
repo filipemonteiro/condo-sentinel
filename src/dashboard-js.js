@@ -208,10 +208,11 @@ export function dashboardJs(options) {
       if (device.stale) items.push(badge('Sem atualização recente', 'info'));
       if (device.batteryLowAlertActive) items.push(badge('Bateria baixa', 'warn'));
       if (device.lowLevelAlertActive) items.push(badge('Nível baixo', 'warn'));
+      if (device.apiFaultActive) items.push(badge('Falha Tuya', 'bad'));
       if (device.sensorFaultActive) items.push(badge('Leitura inválida', 'bad'));
       if (device.alarmActive) items.push(badge('Alarme', 'bad'));
 
-      if (!device.stale && !device.lowLevelAlertActive && !device.sensorFaultActive && !device.alarmActive && !device.batteryLowAlertActive) {
+      if (!device.stale && !device.lowLevelAlertActive && !device.apiFaultActive && !device.sensorFaultActive && !device.alarmActive && !device.batteryLowAlertActive) {
         items.push(badge('Sem alerta ativo', 'neutral'));
       }
 
@@ -227,7 +228,7 @@ export function dashboardJs(options) {
 
     function renderDeviceCard(device) {
       const online = device.online;
-      const hasAlert = device.lowLevelAlertActive || device.sensorFaultActive || device.alarmActive || device.batteryLowAlertActive;
+      const hasAlert = device.lowLevelAlertActive || device.apiFaultActive || device.sensorFaultActive || device.alarmActive || device.batteryLowAlertActive;
       let levelBar = '';
       let extra = '';
 

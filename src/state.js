@@ -26,6 +26,8 @@ export function createDefaultDeviceState(device) {
     breachCount: 0,
     apiFaultActive: false,
     lastApiFaultAlertAt: 0,
+    lastApiFaultRecoveryAt: 0,
+    lastApiFaultReason: null,
     batteryLowAlertActive: false,
     lastBatteryLowAlertAt: 0,
     alarmActive: false,
@@ -175,6 +177,8 @@ export function defaultGlobalState() {
   return {
     devices: {},
     automations: {},
+    pendingNotifications: [],
+    integrations: {},
   };
 }
 
@@ -201,6 +205,8 @@ export function mergeDeviceStateDefaults(existing) {
     breachCount: 0,
     apiFaultActive: false,
     lastApiFaultAlertAt: 0,
+    lastApiFaultRecoveryAt: 0,
+    lastApiFaultReason: null,
     batteryLowAlertActive: false,
     lastBatteryLowAlertAt: 0,
     alarmActive: false,

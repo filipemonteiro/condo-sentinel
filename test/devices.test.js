@@ -350,6 +350,61 @@ test('consecutive Tuya status failures keep error state and respect fault cooldo
   assert.match(notifications[1], /Falha ao consultar/);
 });
 
+test('sends API fault recovery notification when device status query succeeds again', async () => {
+  const env = makeEnv();
+  const device = {
+    id: 'water-sensor-test',
+    name: 'Reservoir sensor',
+    role: 'tank_a',
+    type: 'water_level_sensor',
+  };
+  const deviceStates = {
+    [device.id]: {
+      apiFaultActive: true,
+      lastApiFaultReason: 'status',
+      lastApiFaultAlertAt: 60_000,
+    },
+  };
+  const notifications = [];
+  const context = {
+    devicesById: {},
+    devicesByRole: {},
+    readingsByRole: {},
+    availabilityByRole: {},
+    batchInfoById: {},
+  };
+
+  await withFetch(
+    (url) => {
+      if (url.includes('/v2.0/cloud/thing/batch')) {
+        return jsonResponse({
+          success: true,
+          result: [{ id: device.id, is_online: true }],
+        });
+      }
+
+      return jsonResponse(waterStatus(80));
+    },
+    () => processDevices(
+      env,
+      'access-token',
+      [device],
+      deviceStates,
+      cfg,
+      120_000,
+      notifications,
+      context
+    )
+  );
+
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0], /consulta ao device "Reservoir sensor" foi restabelecida/);
+  assert.equal(deviceStates[device.id].apiFaultActive, false);
+  assert.equal(deviceStates[device.id].lastApiFaultRecoveryAt, 120_000);
+  assert.equal(deviceStates[device.id].lastApiFaultReason, null);
+  assert.equal(context.readingsByRole.tank_a.percent, 80);
+});
+
 test('Tuya batch chunk failure records API faults only for affected devices', async () => {
   const env = makeEnv();
   const devices = Array.from({ length: 21 }, (_, index) => ({

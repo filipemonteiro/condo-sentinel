@@ -5,7 +5,7 @@
 
 import { toInt, parseJsonEnv, jsonResponse, htmlResponse } from './utils.js';
 import { getConfig } from './config.js';
-import { loadAllDeviceStates, createDefaultDeviceState } from './state.js';
+import { loadAllDeviceStates, createDefaultDeviceState, loadGlobalState } from './state.js';
 import { getDeviceHistory } from './history.js';
 import { applyRuntimeDeviceConfig } from './devices.js';
 import { renderDashboardHtml } from './dashboard-template.js';
@@ -21,8 +21,11 @@ export async function buildDashboardStatus(env) {
   const staleAfterMinutes = cfg.dashboardStaleAfterMinutes ?? toInt(env.DASHBOARD_STALE_AFTER_MINUTES, 30);
   const staleAfterMs = staleAfterMinutes * 60 * 1000;
 
-  // Carrega estados isolados por device
-  const deviceStates = await loadAllDeviceStates(env, devices);
+  // Carrega estados isolados por device e estado global (para automações)
+  const [deviceStates, globalState] = await Promise.all([
+    loadAllDeviceStates(env, devices),
+    loadGlobalState(env),
+  ]);
 
   const deviceViews = (Array.isArray(devices) ? devices : []).map(rawDevice => {
     const device = applyRuntimeDeviceConfig(rawDevice, cfg);
@@ -70,7 +73,7 @@ export async function buildDashboardStatus(env) {
   return {
     summary,
     devices: deviceViews,
-    automations: {}, // TODO: carregar automations isoladamente
+    automations: globalState.automations || {},
     generatedAt: now,
     staleAfterMinutes,
   };

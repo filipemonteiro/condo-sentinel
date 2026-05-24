@@ -7,6 +7,8 @@ import { getTuyaDeviceStatus, buildBatchDeviceMap, getTuyaDevicesBatchInfo } fro
 import { toInt, toNumber, isAlarmLikeValue, getInvalidWaterLevelReadingReason, sanitizeBatchInfo, statusArrayToMap } from './utils.js';
 import { appendDeviceHistory } from './history.js';
 
+const BATTERY_RECOVERY_HYSTERESIS_PERCENT = 5;
+
 /**
  * Processa todos os devices habilitados
  */
@@ -304,7 +306,7 @@ export async function inspectWaterLevelSensor(env, accessToken, device, dState, 
   const shouldNotifyBatteryRecovery =
     dState.batteryLowAlertActive &&
     Number.isFinite(reading.battery) &&
-    reading.battery > batteryThreshold + 5;
+    reading.battery > batteryThreshold + BATTERY_RECOVERY_HYSTERESIS_PERCENT;
 
   if (shouldNotifyBatteryRecovery) {
     notifications.push(
@@ -487,7 +489,7 @@ export async function inspectGenericStatusDevice(
     dState.lastBatteryLowAlertAt = now;
   }
 
-  if (dState.batteryLowAlertActive && Number.isFinite(batteryValue) && batteryValue > batteryThreshold + 5) {
+  if (dState.batteryLowAlertActive && Number.isFinite(batteryValue) && batteryValue > batteryThreshold + BATTERY_RECOVERY_HYSTERESIS_PERCENT) {
     notifications.push(
       `✅ A bateria do device "${device.name || device.id}" foi recuperada para ${batteryValue}%.`
     );

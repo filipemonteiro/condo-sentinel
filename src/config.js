@@ -87,8 +87,8 @@ async function getConfig(env) {
   const valueFor = (name) => runtimeConfig[name] ?? env[name] ?? DEFAULT_CONFIG[name];
 
   return {
-    dryRun: toBool(env.DRY_RUN, DEFAULT_CONFIG.DRY_RUN),
-    logFullPayload: toBool(env.LOG_FULL_PAYLOAD, DEFAULT_CONFIG.LOG_FULL_PAYLOAD),
+    dryRun: toBool(valueFor('DRY_RUN'), DEFAULT_CONFIG.DRY_RUN),
+    logFullPayload: toBool(valueFor('LOG_FULL_PAYLOAD'), DEFAULT_CONFIG.LOG_FULL_PAYLOAD),
     defaultCooldownMs: toInt(valueFor('COOLDOWN_MINUTES'), DEFAULT_CONFIG.COOLDOWN_MINUTES) * 60 * 1000,
     defaultOfflineCooldownMs: toInt(valueFor('OFFLINE_COOLDOWN_MINUTES'), DEFAULT_CONFIG.OFFLINE_COOLDOWN_MINUTES) * 60 * 1000,
     defaultFaultCooldownMs: toInt(valueFor('SENSOR_COOLDOWN_MINUTES'), DEFAULT_CONFIG.SENSOR_COOLDOWN_MINUTES) * 60 * 1000,

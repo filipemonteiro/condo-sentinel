@@ -82,12 +82,13 @@ export async function saveDashboardUserMappings(env, users) {
 }
 
 /**
- * Carrega estado de um device específico, com migração se necessário
+ * Carrega estado de um device específico, com migração se necessário.
+ * @param {object|null} legacyDevices - Se fornecido, usa este mapa para migração em vez de reler o KV global.
  */
-export async function loadDeviceState(env, deviceId) {
+export async function loadDeviceState(env, deviceId, legacyDevices = null) {
   const key = `state:device:${deviceId}`;
   let raw = await env.STATE.get(key);
-  
+
   if (raw) {
     try {
       return JSON.parse(raw);
@@ -95,8 +96,19 @@ export async function loadDeviceState(env, deviceId) {
       console.warn("Estado corrompido para device, usando padrão. ID omitido por segurança.");
     }
   }
-  
-  // Fallback: tentar migrar do estado global (se existir)
+
+  // Caminho rápido: caller forneceu o mapa legado já carregado (evita leitura extra de KV)
+  if (legacyDevices !== null) {
+    if (legacyDevices && legacyDevices[deviceId]) {
+      const migrated = legacyDevices[deviceId];
+      await saveDeviceState(env, deviceId, migrated);
+      console.log("Migrado estado legado para device. ID omitido por segurança.");
+      return migrated;
+    }
+    return null;
+  }
+
+  // Fallback: tentar migrar do estado global (se existir) — apenas quando legacyDevices não é fornecido
   const globalKey = "condo_automation_state";
   const globalRaw = await env.STATE.get(globalKey);
   if (globalRaw) {
@@ -112,7 +124,7 @@ export async function loadDeviceState(env, deviceId) {
       console.warn("Erro ao migrar estado global.");
     }
   }
-  
+
   return null;
 }
 
@@ -131,12 +143,13 @@ export async function saveDeviceState(env, deviceId, state) {
 }
 
 /**
- * Carrega estados de todos os devices
+ * Carrega estados de todos os devices.
+ * @param {object|null} legacyDevices - Se fornecido, passado para loadDeviceState para evitar leituras duplicadas de KV.
  */
-export async function loadAllDeviceStates(env, devices) {
+export async function loadAllDeviceStates(env, devices, legacyDevices = null) {
   const states = {};
   for (const device of devices) {
-    states[device.id] = await loadDeviceState(env, device.id) || createDefaultDeviceState(device);
+    states[device.id] = await loadDeviceState(env, device.id, legacyDevices) || createDefaultDeviceState(device);
   }
   return states;
 }

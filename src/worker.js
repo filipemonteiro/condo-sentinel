@@ -66,25 +66,22 @@ export default {
 
       const deviceId = url.searchParams.get("device");
       if (!deviceId) {
-        return handleApiHistory(env, deviceId);
+        return jsonResponse({ error: "Device ID required" }, 400);
       }
 
       if (!isRegisteredDeviceId(env, deviceId)) {
         return jsonResponse({ error: "Unknown device" }, 404);
       }
 
-      const history = await handleApiHistory(env, deviceId);
-      return history;
+      return await handleApiHistory(env, deviceId);
     }
 
     // Dashboard HTML
     if (url.pathname === "/dashboard") {
       const cfg = await getConfig(env);
-      const currentUser = await getDashboardUser(request, env);
       return htmlResponse(renderDashboardHtml({
         sessionTimeoutMinutes: cfg.dashboardSessionTimeoutMinutes,
         dashboardTitle: cfg.dashboardTitle,
-        userRole: currentUser.role,
       }));
     }
 
@@ -336,9 +333,9 @@ export async function handleCheck(env) {
     return;
   }
 
-  // Carrega estados
-  const deviceStates = await loadAllDeviceStates(env, enabledDevices);
+  // Carrega estados — globalState primeiro para reaproveitar devices legados na migração
   const globalState = await loadGlobalState(env);
+  const deviceStates = await loadAllDeviceStates(env, enabledDevices, globalState.devices);
 
   const notifications = [];
   const context = {

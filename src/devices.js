@@ -9,6 +9,25 @@ import { appendDeviceHistory } from './history.js';
 
 const BATTERY_RECOVERY_HYSTERESIS_PERCENT = 5;
 
+function buildReadingDetail(device, reading) {
+  if (!reading) return '';
+  switch (device.type) {
+    case 'water_level_sensor':
+      return Number.isFinite(reading.percent) ? ` Nível atual: ${reading.percent}%.` : '';
+    case 'gas_sensor':
+      return isAlarmLikeValue(reading.alarmValue) ? ' Gás detectado!' : ' Sem detecção de gás.';
+    case 'water_leak_sensor':
+      return isAlarmLikeValue(reading.alarmValue) ? ' Vazamento detectado!' : ' Sem detecção de vazamento.';
+    case 'valve':
+      if (reading.currentValue == null) return '';
+      return typeof reading.currentValue === 'boolean'
+        ? ` Válvula ${reading.currentValue ? 'aberta' : 'fechada'}.`
+        : ` Posição: ${reading.currentValue}.`;
+    default:
+      return '';
+  }
+}
+
 /**
  * Processa todos os devices habilitados
  */
@@ -127,11 +146,12 @@ function recordDeviceApiFault({ device, dState, cfg, now, notifications, reason 
   dState.apiFaultActive = true;
 }
 
-function recordDeviceApiRecovery({ device, dState, now, notifications }) {
+function recordDeviceApiRecovery({ device, dState, now, notifications, reading }) {
   if (!dState.apiFaultActive) return;
 
+  const detail = buildReadingDetail(device, reading);
   notifications.push(
-    `✅ A consulta ao device "${device.name || device.id}" foi restabelecida.`
+    `✅ A consulta ao device "${device.name || device.id}" foi restabelecida.${detail}`
   );
   dState.apiFaultActive = false;
   dState.lastApiFaultRecoveryAt = now;
@@ -184,13 +204,7 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
     };
   }
 
-  if (dState.offlineAlertActive) {
-    notifications.push(
-      `✅ O device "${device.name || device.id}" voltou a ficar online.`
-    );
-    dState.offlineAlertActive = false;
-    dState.lastOnlineRecoveryAt = now;
-  }
+  const wasOfflineAlertActive = dState.offlineAlertActive;
 
   let reading = null;
 
@@ -256,7 +270,16 @@ export async function inspectDevice(env, accessToken, device, batchDeviceInfo, d
       break;
   }
 
-  recordDeviceApiRecovery({ device, dState, now, notifications });
+  if (wasOfflineAlertActive) {
+    const detail = buildReadingDetail(device, reading);
+    notifications.push(
+      `✅ O device "${device.name || device.id}" voltou a ficar online.${detail}`
+    );
+    dState.offlineAlertActive = false;
+    dState.lastOnlineRecoveryAt = now;
+  }
+
+  recordDeviceApiRecovery({ device, dState, now, notifications, reading });
 
   return {
     online: true,
@@ -468,8 +491,9 @@ export async function inspectGenericStatusDevice(
   }
 
   if (!isAlarm && dState.alarmActive) {
+    const detail = buildReadingDetail(device, reading);
     notifications.push(
-      `✅ O device "${device.name || device.id}" saiu do estado de alarme.`
+      `✅ O device "${device.name || device.id}" saiu do estado de alarme.${detail}`
     );
     dState.alarmActive = false;
     dState.lastAlarmRecoveryAt = now;

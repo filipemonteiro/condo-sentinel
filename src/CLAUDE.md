@@ -166,6 +166,7 @@ export function applyRuntimeDeviceConfig(device, cfg): Device
 - `context` object is mutated in-place: `devicesById`, `devicesByRole`, `readingsByRole`, `availabilityByRole`, `batchInfoById`. Automations consume this.
 - Device-level cooldowns override global: `device.offlineCooldownMinutes ?? cfg.defaultOfflineCooldownMs`. Pattern repeated for all cooldown types.
 - `recordDeviceApiFault` / `recordDeviceApiRecovery` are symmetric — recovery clears `apiFaultActive` and sends a recovery notification if the fault was active.
+- `buildReadingDetail()` appends the current reading to recovery messages (API recovery, online recovery, alarm recovery). The removal regexes in `worker.js` are start-anchored only because of this suffix — see `docs/constitution.md §5` before changing any recovery message format.
 - `inspectWaterLevelSensor` uses `device.levelCode || "liquid_level_percent"` — allows per-device override of the Tuya code for the level percentage field.
 - Battery recovery threshold is `batteryThreshold + 5` (hardcoded hysteresis). Not configurable.
 

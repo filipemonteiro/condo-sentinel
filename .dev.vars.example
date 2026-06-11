@@ -34,6 +34,16 @@ DASHBOARD_ACCESS_TOKEN=your_secure_random_token
 # Tempo máximo de inatividade da sessão do dashboard
 DASHBOARD_SESSION_TIMEOUT_MINUTES=30
 
+# Usuários do dashboard e seus papéis (admin | viewer)
+# NÃO colocar e-mails reais em arquivos commitados
+DASHBOARD_USERS_JSON=[{"email":"admin@example.test","role":"admin"}]
+
+# Validação criptográfica da identidade via Cloudflare Access (recomendado em produção)
+# Quando ambos estão definidos, o e-mail só é aceito do JWT assinado
+# (Cf-Access-Jwt-Assertion); headers simples passam a ser ignorados.
+# CF_ACCESS_TEAM_DOMAIN=myteam.cloudflareaccess.com
+# CF_ACCESS_AUD=your_access_application_aud_tag
+
 
 ########################################
 # 🖥️ APP / DASHBOARD CONFIG
@@ -70,6 +80,10 @@ OFFLINE_COOLDOWN_MINUTES=180
 
 # Cooldown para falhas de sensor
 SENSOR_COOLDOWN_MINUTES=60
+
+# Limite e cooldown de alertas de bateria baixa
+BATTERY_THRESHOLD_PERCENT=20
+BATTERY_COOLDOWN_MINUTES=180
 
 
 ########################################

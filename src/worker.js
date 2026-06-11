@@ -22,6 +22,7 @@ import { applyRuntimeDeviceConfig, processDevices } from './devices.js';
 import { evaluateAutomations } from './automations.js';
 import { buildDashboardStatus, renderDashboardHtml, handleApiHistory } from './dashboard.js';
 import { sendTelegramMessage } from './notifications.js';
+import { isAccessJwtConfigured, getVerifiedAccessEmail } from './access.js';
 
 const TUYA_TOKEN_FAULT_MESSAGE =
   "⚠️ Falha ao obter token da Tuya. Verifique credenciais, conectividade ou assinatura da API antes da próxima verificação.";
@@ -55,6 +56,10 @@ export default {
       const authResponse = requireDashboardAuth(request, env);
       if (authResponse) return authResponse;
 
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "Method not allowed" }, 405);
+      }
+
       const payload = await buildDashboardStatus(env);
       return jsonResponse(payload);
     }
@@ -63,6 +68,10 @@ export default {
     if (url.pathname === "/api/history") {
       const authResponse = requireDashboardAuth(request, env);
       if (authResponse) return authResponse;
+
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "Method not allowed" }, 405);
+      }
 
       const deviceId = url.searchParams.get("device");
       if (!deviceId) {
@@ -132,6 +141,12 @@ export default {
               email: String(u.email).trim().toLowerCase(),
               role: u.role === 'admin' ? 'admin' : 'viewer',
             }));
+
+          // Anti-lockout: a lista efetiva (env + KV) precisa manter ao menos um admin
+          const effectiveUsers = mergeUsers(parseJsonEnv(env.DASHBOARD_USERS_JSON, []), normalizedUsers);
+          if (!effectiveUsers.some(u => u?.role === 'admin')) {
+            return jsonResponse({ error: 'At least one admin user is required.' }, 400);
+          }
         }
 
         await saveDashboardRuntimeConfig(env, runtimeConfig);
@@ -268,12 +283,20 @@ function mergeUsers(envUsers, kvUsers) {
 }
 
 async function getDashboardUser(request, env) {
-  const emailHeader = String(
-    request.headers.get('Cf-Access-Authenticated-User-Email') ||
-    request.headers.get('CF-Access-Client-Email') ||
-    ''
-  ).trim();
-  const email = emailHeader ? emailHeader.toLowerCase() : null;
+  let email = null;
+
+  if (isAccessJwtConfigured(env)) {
+    // Modo verificado: e-mail só é aceito do JWT assinado pelo Cloudflare Access.
+    // Headers simples são ignorados porque podem ser forjados pelo cliente.
+    email = await getVerifiedAccessEmail(request, env);
+  } else {
+    const emailHeader = String(
+      request.headers.get('Cf-Access-Authenticated-User-Email') ||
+      request.headers.get('CF-Access-Client-Email') ||
+      ''
+    ).trim();
+    email = emailHeader ? emailHeader.toLowerCase() : null;
+  }
 
   const savedUsers = await loadDashboardUserMappings(env);
   const users = mergeUsers(parseJsonEnv(env.DASHBOARD_USERS_JSON, []), savedUsers);

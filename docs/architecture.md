@@ -77,6 +77,7 @@ Priority (highest → lowest):
 | `tuya:access_token` | JSON object | Cached Tuya token: `{ token, expiresAt }`. Refreshed when within 60s of expiry. |
 | `dashboard:runtime:config` | JSON object | Admin-editable config fields. Validated and clamped by `normalizeDashboardRuntimeConfig()`. |
 | `dashboard:runtime:user-roles` | JSON array | Admin-managed user list: `[{ email, role }]`. Overrides `DASHBOARD_USERS_JSON` env var entries. |
+| `access:jwks` | JSON object | Cached Cloudflare Access JWKS: `{ fetchedAt, jwks }`. TTL 1h; refreshed on unknown `kid`. Only used when CF Access JWT validation is enabled. |
 
 ### Legacy key
 | `condo_automation_state` | also used | Global state was previously the only state store. `loadDeviceState()` migrates legacy device sub-keys on first read. |
@@ -97,9 +98,16 @@ Priority (highest → lowest):
         returns 401 if missing/wrong, 503 if token not configured
 
       getDashboardUser()
-        reads CF-Access-Authenticated-User-Email header (Cloudflare Access)
-        looks up in merged user list (env DASHBOARD_USERS_JSON + KV user-roles)
+        if CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD are configured:
+          verifies the Cf-Access-Jwt-Assertion JWT (RS256) against the
+          team JWKS (access.js); plain email headers are IGNORED
+        else (legacy mode):
+          reads CF-Access-Authenticated-User-Email header as-is
+        looks up email in merged user list (env DASHBOARD_USERS_JSON + KV user-roles)
         returns { email, role: 'admin' | 'viewer' }
+
+      Anti-lockout: POST /api/dashboard-context rejects a user list whose
+      merged result (env + KV) would contain no admin.
 
 Role effects:
   viewer → can call GET /api/status, GET /api/history, GET /api/dashboard-context

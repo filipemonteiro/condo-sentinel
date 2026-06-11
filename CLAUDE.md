@@ -30,6 +30,7 @@ Before deploying: copy `wrangler.example.toml` → `wrangler.toml` and `cp .dev.
 | File | Responsibility |
 |---|---|
 | `src/worker.js` | Entry point: HTTP router + cron `handleCheck` + notification pipeline |
+| `src/access.js` | Cloudflare Access JWT validation (verified admin identity, opt-in via `CF_ACCESS_*`) |
 | `src/config.js` | Merge env vars + KV runtime config → normalized `cfg` object |
 | `src/state.js` | All KV reads/writes. Owns key schema. |
 | `src/tuya.js` | Tuya API: token acquisition/cache, request signing, status + batch calls |
@@ -60,4 +61,5 @@ Before deploying: copy `wrangler.example.toml` → `wrangler.toml` and `cp .dev.
 
 - [docs/constitution.md](docs/constitution.md) — non-negotiable constraints
 - [docs/architecture.md](docs/architecture.md) — flow diagrams, KV schema, auth model
+- [docs/configuration.md](docs/configuration.md) — env vars + `DEVICE_REGISTRY_JSON` / `AUTOMATIONS_JSON` schemas
 - [src/CLAUDE.md](src/CLAUDE.md) — per-module SDD specs

@@ -127,6 +127,7 @@ Use a value like `[{"email":"your-email@example.com","role":"admin"}]`.
    - Add a new application for your dashboard domain
    - Set "Login method" to your preferred provider (Google, GitHub, etc.)
    - This will send the `CF-Access-Client-Email` header
+   - **Strongly recommended:** also set `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` in the worker so the email is validated from the signed Access JWT instead of a forgeable header (see [docs/configuration.md](docs/configuration.md#cloudflare-access-jwt-validation-recommended-in-production))
 
 3. **Deploy the worker:**
    ```bash
@@ -239,20 +240,27 @@ Optional:
 
 - `APP_NAME`
 - `DASHBOARD_TITLE`
+- `DASHBOARD_USERS_JSON` → dashboard users and roles (`[{"email":"...","role":"admin"}]`)
+- `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` → enable Cloudflare Access JWT validation for admin identity (recommended in production)
 - `COOLDOWN_MINUTES`
 - `OFFLINE_COOLDOWN_MINUTES`
 - `SENSOR_COOLDOWN_MINUTES`
+- `BATTERY_THRESHOLD_PERCENT`
+- `BATTERY_COOLDOWN_MINUTES`
 - `HISTORY_MAX_POINTS`
 - `HISTORY_MIN_INTERVAL_MINUTES`
 - `HISTORY_MIN_DELTA_PERCENT`
 - `DASHBOARD_STALE_AFTER_MINUTES`
 - `DASHBOARD_SESSION_TIMEOUT_MINUTES`
 
+Full reference, including the `DEVICE_REGISTRY_JSON` and `AUTOMATIONS_JSON` schemas, lives in [docs/configuration.md](docs/configuration.md).
+
 ## Endpoints
 
 - `/dashboard` → Web UI
-- `/api/status` → Current state (requires token)
-- `/api/history` → Device history (requires token)
+- `/api/status` → Current state (requires token, GET only)
+- `/api/history?device=<id>` → Device history (requires token, GET only)
+- `/api/dashboard-context` → GET: config + user context; POST: save runtime config and users (admin only)
 
 Authentication format:
 
@@ -264,7 +272,7 @@ The dashboard asks for the token only when there is no active browser session. A
 
 ## GitHub Actions Deploy
 
-The deploy workflow generates `wrangler.toml` from `wrangler.example.toml` and deploys on pushes to `main`.
+CI (`ci.yml`) runs syntax checks and the full test suite on every pull request and non-main push. The deploy workflow (`deploy.yml`) runs the same checks, generates `wrangler.toml` from `wrangler.example.toml`, and deploys on pushes to `main` — a failing test blocks the deploy.
 
 Configure these repository secrets before enabling public deployment:
 

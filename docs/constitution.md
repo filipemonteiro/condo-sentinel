@@ -83,3 +83,17 @@ Do not embed any operational data into the HTML template.
 ## 8. `wrangler.toml` must not contain runtime variables or secrets
 
 The CI pipeline (`deploy.yml`) copies `wrangler.example.toml` → `wrangler.toml` and actively guards against runtime vars being present (the `Guard runtime secrets` step uses grep and exits 1). Runtime config lives in Cloudflare Workers settings or Wrangler secrets, not in committed files.
+
+---
+
+## 9. Verified identity must never be weakened back to header trust
+
+When `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are configured, `getDashboardUser()` accepts the user email **only** from the `Cf-Access-Jwt-Assertion` JWT validated by `access.js` (signature, issuer, audience, expiry). Plain headers like `Cf-Access-Authenticated-User-Email` are client-forgeable and must be ignored in this mode.
+
+The legacy header-trust path exists only for backward compatibility with deployments that don't use Cloudflare Access. Do not add code paths that read identity from plain headers when JWT validation is enabled, and do not relax any of the JWT checks (alg allow-list, `iss`, `aud`, `exp`, signature) without an explicit architectural decision.
+
+---
+
+## 10. The merged user list must always contain at least one admin
+
+`POST /api/dashboard-context` rejects (HTTP 400) any user list whose merged result (env `DASHBOARD_USERS_JSON` + KV overrides) would leave zero admins. This prevents permanent lockout from the runtime config panel. Do not bypass this guard when adding new user-management paths.

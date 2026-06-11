@@ -1570,3 +1570,122 @@ test('scheduled check removes only TUYA token failure pending notification on re
   assert.equal(savedGlobalState.pendingNotifications.length, 1);
   assert.match(savedGlobalState.pendingNotifications[0].message, /Main valve/);
 });
+
+test('status API rejects non-GET methods with 405', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret-token' },
+    }),
+    env,
+    {}
+  );
+
+  assert.equal(res.status, 405);
+  assert.deepEqual(await res.json(), { error: 'Method not allowed' });
+});
+
+test('history API rejects non-GET methods with 405', async () => {
+  const res = await worker.fetch(
+    new Request('https://example.com/api/history?device=device-test', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer secret-token' },
+    }),
+    historyEnv,
+    {}
+  );
+
+  assert.equal(res.status, 405);
+  assert.deepEqual(await res.json(), { error: 'Method not allowed' });
+});
+
+test('saving users without any admin is rejected to prevent lockout', async () => {
+  // Único admin atual vive no KV; o POST tenta substituí-lo por uma lista só de viewers
+  const state = makeState({
+    'dashboard:runtime:user-roles': JSON.stringify([
+      { email: 'admin@example.test', role: 'admin' },
+    ]),
+  });
+
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        users: [{ email: 'viewer@example.test', role: 'viewer' }],
+      }),
+    }),
+    {
+      ...env,
+      ...state,
+    },
+    {}
+  );
+
+  assert.equal(res.status, 400);
+  assert.deepEqual(await res.json(), { error: 'At least one admin user is required.' });
+  const savedUsers = JSON.parse(state.store.get('dashboard:runtime:user-roles'));
+  assert.equal(savedUsers[0].role, 'admin');
+});
+
+test('demoting the env admin via KV without another admin is rejected', async () => {
+  const state = makeState();
+
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        users: [{ email: 'admin@example.test', role: 'viewer' }],
+      }),
+    }),
+    {
+      ...env,
+      ...state,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+    },
+    {}
+  );
+
+  assert.equal(res.status, 400);
+  assert.deepEqual(await res.json(), { error: 'At least one admin user is required.' });
+});
+
+test('saving users keeping at least one admin succeeds', async () => {
+  const state = makeState();
+
+  const res = await worker.fetch(
+    new Request('https://example.com/api/dashboard-context', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret-token',
+        'Cf-Access-Authenticated-User-Email': 'admin@example.test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        users: [
+          { email: 'admin@example.test', role: 'admin' },
+          { email: 'viewer@example.test', role: 'viewer' },
+        ],
+      }),
+    }),
+    {
+      ...env,
+      ...state,
+      DASHBOARD_USERS_JSON: '[{"email":"admin@example.test","role":"admin"}]',
+    },
+    {}
+  );
+
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(state.store.get('dashboard:runtime:user-roles'));
+  assert.equal(saved.length, 2);
+});

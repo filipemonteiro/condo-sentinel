@@ -18,7 +18,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "check": "node --check src/worker.js && node --check src/tuya.js && node --check src/notifications.js && node --check src/dashboard.js && node --check src/utils.js && node --check src/automations.js && node --check src/devices.js && node --check src/state.js && node --check src/history.js",
+    "check": "for f in src/*.js; do node --check \"$f\" || exit 1; done",
     "test": "node --test",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"

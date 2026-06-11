@@ -13,6 +13,9 @@ All source files are Cloudflare Workers ESM modules. No bundler. No TypeScript. 
 - `constantTimeEqual()` must be used for token comparison — never `===`.
 - `handleCheck()` is exported for direct use in tests. Keep it side-effect-free w.r.t. the module scope.
 - `saveAllDeviceStates` and `saveGlobalState` run in a `finally` block — state must always persist even if notification sending fails.
+- `getDashboardUser()` must use `access.js` (verified JWT) when `isAccessJwtConfigured(env)` — never read plain email headers in that mode. See `docs/constitution.md §9`.
+- `POST /api/dashboard-context` must reject user lists whose merged result has no admin (anti-lockout, `docs/constitution.md §10`).
+- `/api/status` and `/api/history` are GET-only; other methods return 405.
 
 **Interfaces**
 ```js
@@ -28,6 +31,29 @@ export async function handleCheck(env)  // testable cron body
 - `buildEditableDeviceConfigPayload()` builds per-device editable config from the registry + runtime config, filtering to `EDITABLE_DEVICE_CONFIG_FIELDS` only.
 - `globalState` is loaded before `loadAllDeviceStates` in `handleCheck` — `globalState.devices` is forwarded to avoid a redundant KV read of `condo_automation_state` during legacy migration.
 
+
+---
+
+## access.js
+
+**Intent** — Cryptographic validation of Cloudflare Access identity. When `CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD` are configured, verifies the `Cf-Access-Jwt-Assertion` JWT (RS256) against the team's JWKS and returns the validated email. Replaces header trust, which is client-forgeable.
+
+**Constraints**
+- Only `RS256` with a known `kid` is accepted. Reject `none`, HS*, or missing `kid` — never widen the algorithm allow-list.
+- All of signature, `iss` (`https://<team domain>`), `aud`, `exp`, and `nbf` must pass. A failure in any check returns `null` (treated as anonymous viewer) — never throw to the caller.
+- JWKS is cached in KV under `access:jwks` with a 1h TTL. On unknown `kid`, refetch once (key rotation). KV cache write failure must not block validation.
+
+**Interfaces**
+```js
+export function isAccessJwtConfigured(env): boolean
+export async function getVerifiedAccessEmail(request, env): Promise<string|null>  // normalized lowercase email
+export async function verifyAccessJwt(token, env): Promise<string|null>
+```
+
+**Implementation notes**
+- JWKS endpoint: `https://<CF_ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`. Team domain is normalized (protocol and trailing slashes stripped).
+- `getVerifiedAccessEmail()` wraps `verifyAccessJwt()` in try/catch and logs a generic warning — no token contents in logs.
+- Tested in `test/access.test.js` with a generated RSA keypair and a mocked JWKS fetch.
 
 ---
 
@@ -205,20 +231,23 @@ export async function getDeviceHistory(env, deviceId): Promise<HistoryPoint[]>
 
 ## notifications.js
 
-**Intent** — Single-responsibility module for sending Telegram messages. Accepts a pre-built message string and sends it to `TELEGRAM_CHAT_ID` via the Bot API.
+**Intent** — Single-responsibility module for sending Telegram messages. Accepts a pre-built message string, splits it at the API's 4096-char limit, and sends it to `TELEGRAM_CHAT_ID` via the Bot API.
 
 **Constraints**
 - Must check both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` before attempting any network call — throw if either is absent.
 - `dryRun = true` must prevent any network call. Log only.
 - Error details from Telegram must be summarized (no raw response body in logs).
+- Every outgoing chunk must respect `TELEGRAM_MAX_MESSAGE_LENGTH` (4096). Splitting prefers the `\n\n` notification separator, then `\n`, then a hard cut.
 
 **Interfaces**
 ```js
 export async function sendTelegramMessage(env, message, dryRun): Promise<void>
+export function splitTelegramMessage(message, maxLength?): string[]
 ```
 
 **Implementation notes**
 - No retry logic here. Retry/persistence of failed notifications is handled in `worker.js` via `pendingNotifications`.
+- Chunks are sent sequentially; a failure mid-batch throws and the whole batch goes back to `pendingNotifications` in `worker.js` (possible partial resend — acceptable, dedup keeps noise down).
 - `summarizeTelegramError()` extracts only `ok`, `error_code`, `description` — avoids leaking message content back into logs.
 
 ---
@@ -308,3 +337,38 @@ export function dashboardJs(options: { sessionTimeoutMinutes }): string
 **⚠️ Tech debt**
 - The entire JS is an untyped string. No linting, no type checking, no unit tests. Bugs in client-side rendering are caught only through manual browser testing.
 - Config form rendering (`renderConfigForm`) is constructed as innerHTML strings — any new field requires manual HTML generation.
+
+---
+
+## utils.js
+
+**Intent** — Dependency-free utility functions shared by every module: env coercion, JSON parsing, crypto helpers (SHA-256 / HMAC for Tuya signing), alarm-value heuristics, reading validation, batch sanitization, and HTTP response builders with security headers.
+
+**Constraints**
+- All env coercion must go through `toInt` / `toNumber` / `toBool` — never parse env strings directly elsewhere (global convention).
+- `parseJsonEnv()` must never log the raw value on parse failure — only a generic message plus the error detail.
+- `jsonResponse()` / `htmlResponse()` are the only places that emit responses; both must include `securityHeaders()` and `Cache-Control: no-store`. The dashboard CSP lives in `htmlResponse()` — any new external origin (CDN, fonts) must be added there, nowhere else.
+- `sanitizeBatchInfo()` is the allow-list for what Tuya batch metadata may be persisted in device state. Add fields deliberately; never spread the raw object.
+
+**Interfaces**
+```js
+export function toInt(value, fallback): number
+export function toNumber(value): number|null
+export function toBool(value, fallback?): boolean
+export function parseJsonEnv(value, fallback): any
+export function statusArrayToMap(resultArray): Record<code, value>
+export function stringifyError(err): string
+export async function sha256Hex(input): Promise<string>
+export async function hmacSha256Upper(secret, message): Promise<string>
+export function isAlarmLikeValue(value): boolean
+export function getInvalidWaterLevelReadingReason(reading): string|null
+export function sanitizeBatchInfo(info): object|null
+export function jsonResponse(data, status?): Response
+export function htmlResponse(html, status?): Response
+export function securityHeaders(extra?): object
+```
+
+**Implementation notes**
+- `isAlarmLikeValue()` keeps an allow-list of alarm-like strings (`alarm`, `leak`, `triggered`, ...). New device types with different alarm vocabularies extend this list.
+- `hmacSha256Upper()` returns uppercase hex — Tuya requires uppercase signatures.
+- `toBool()` only treats the literal string `"true"` (case-insensitive) as true; everything else falls back or is false.

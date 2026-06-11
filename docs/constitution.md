@@ -51,7 +51,7 @@ When a recovery notification is produced (e.g. device came back online), `remove
 
 Matching is done by **string prefix**. The exact patterns are:
 
-| Recovery message regex | Removes pending starting with |
+| Recovery message prefix | Removes pending starting with |
 |---|---|
 | `✅ A consulta ao device "X" foi restabelecida.` | `⚠️ Falha ao consultar o device "X"` |
 | `✅ O device "X" voltou a ficar online.` | `⚠️ O device "X" está offline` |
@@ -59,6 +59,8 @@ Matching is done by **string prefix**. The exact patterns are:
 | `✅ A bateria do device "X" foi recuperada para` | `⚠️ A bateria do device "X" está baixa` |
 | `✅ A leitura do sensor "X" foi restabelecida. Nível atual:` | `⚠️ O sensor "X" está com leitura inválida` |
 | `✅ O nível do sensor "X" normalizou em` | `⚠️ O nível do sensor "X" está em` |
+
+Recovery messages may carry a **suffix** with the current reading (`buildReadingDetail()` in `devices.js`, e.g. ` Válvula aberta.`). The matching regexes are therefore anchored at the start only (`^...`), never at the end — do not re-add `$` anchors.
 
 **If you rename or reformat any notification message, update `removePendingNotificationsForRecoveries()` in the same commit.** Breaking this pairing causes stale fault notifications to persist indefinitely.
 

@@ -520,9 +520,11 @@ function removePendingNotificationsForRecoveries(pendingNotifications, notificat
       removalPatterns.push(message => message.startsWith(failurePrefix));
     };
 
-    exactMatch('⚠️ Falha ao consultar o device "', /^✅ A consulta ao device "([^"]+)" foi restabelecida\.$/);
-    exactMatch('⚠️ O device "', /^✅ O device "([^"]+)" voltou a ficar online\.$/);
-    exactMatch('🚨 O device "', /^✅ O device "([^"]+)" saiu do estado de alarme\.$/);
+    // Sem âncora $: as mensagens de recovery podem trazer um sufixo com a
+    // leitura atual (buildReadingDetail em devices.js). Ver constitution §5.
+    exactMatch('⚠️ Falha ao consultar o device "', /^✅ A consulta ao device "([^"]+)" foi restabelecida\./);
+    exactMatch('⚠️ O device "', /^✅ O device "([^"]+)" voltou a ficar online\./);
+    exactMatch('🚨 O device "', /^✅ O device "([^"]+)" saiu do estado de alarme\./);
     exactMatch('⚠️ A bateria do device "', /^✅ A bateria do device "([^"]+)" foi recuperada para /);
     exactMatch('⚠️ O sensor "', /^✅ A leitura do sensor "([^"]+)" foi restabelecida\. Nível atual: /);
     exactMatch('⚠️ O nível do sensor "', /^✅ O nível do sensor "([^"]+)" normalizou em /);

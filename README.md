@@ -4,6 +4,19 @@
 
 Lightweight IoT monitoring system for condos and small infrastructures.
 
+![Condo Sentinel dashboard with demo devices](docs/images/dashboard.png)
+
+<details>
+<summary>More screenshots</summary>
+
+History view with 24h water level chart:
+
+![History view with water level chart](docs/images/history.png)
+
+</details>
+
+> Screenshots use fictitious demo devices — no real device IDs or locations.
+
 ## Features
 
 - Monitoring of IoT devices (water level, gas, leak sensors, valves)
@@ -14,9 +27,21 @@ Lightweight IoT monitoring system for condos and small infrastructures.
 
 ## Architecture
 
-- Cloudflare Workers
-- Tuya API integration
-- KV storage for state and history
+```mermaid
+flowchart LR
+    CRON([cron */5 min]) --> CHECK["handleCheck()\nworker.js"]
+    CHECK -->|HMAC-signed requests| TUYA[Tuya Cloud API]
+    CHECK -->|"alerts + recoveries\n(cooldowns, dedup, pending retry)"| TG[Telegram Bot]
+    CHECK <-->|"state + smart history\n(write only on change)"| KV[(Cloudflare KV)]
+
+    BROWSER[Dashboard SPA] -->|"Bearer token\n+ CF Access JWT"| API["/api/*"]
+    API --> KV
+```
+
+- Cloudflare Workers (cron polling + HTTP API + dashboard SPA)
+- Tuya API integration (HMAC-SHA256 signed, token cached in KV)
+- KV as the only storage layer — state and history writes optimized for the free tier
+- Full flow diagrams, KV schema and auth model in [docs/architecture.md](docs/architecture.md)
 
 ## Cost Model
 
